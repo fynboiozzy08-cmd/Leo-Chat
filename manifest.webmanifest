@@ -1,0 +1,13 @@
+{
+  "name": "Leo Chat — Roar v7",
+  "short_name": "Leo Chat",
+  "description": "Chat. Connect. Roar.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#070707",
+  "theme_color": "#070707",
+  "orientation": "portrait",
+  "icons": [
+    {"src":"./logo.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}
