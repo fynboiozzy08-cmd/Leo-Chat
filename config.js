@@ -1,4 +1,4 @@
 window.LEO_CONFIG = {
-  SUPABASE_URL: "https://tdboddpakfpbwadyemhs.supabase.co",
-  SUPABASE_KEY: "sb_publishable_2XdLA65q6X2oRPd1T-rIiw_yc5J9bqF"
+  SUPABASE_URL: "https://odpmhwmnzetqgniplted.supabase.co",
+  SUPABASE_KEY: "sb_publishable_92LU7ZNyugh6GfjtVhsPLg_FlvOMxaq"
 };
