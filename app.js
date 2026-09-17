@@ -14,6 +14,30 @@
       cfg.SUPABASE_KEY.length
   );
 
+  // TEMPORARY SUPABASE KEY TEST
+  fetch(cfg.SUPABASE_URL + "/auth/v1/settings", {
+    headers: {
+      apikey: cfg.SUPABASE_KEY
+    }
+  })
+    .then(async (response) => {
+      const text = await response.text();
+
+      alert(
+        "Supabase key test\n" +
+          "Status: " +
+          response.status +
+          "\nResponse: " +
+          text.slice(0, 300)
+      );
+    })
+    .catch((error) => {
+      alert(
+        "Supabase key test failed\n" +
+          error.message
+      );
+    });
+
   const app = document.getElementById("app");
 
   let state = {
