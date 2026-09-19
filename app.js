@@ -40,10 +40,6 @@ alert("LEO NEW APP.JS 20260919");
 
   const MEDIA_BUCKET = "chat-media";
 
-  /* =========================================================
-     APP STATE
-     ========================================================= */
-
   let state = {
     user: null,
     profile: null,
@@ -74,10 +70,6 @@ alert("LEO NEW APP.JS 20260919");
   let messageChannel = null;
   let presenceChannel = null;
   let authSubscription = null;
-
-  /* =========================================================
-     HELPERS
-     ========================================================= */
 
   const esc = (s) =>
     String(s ?? "").replace(
@@ -790,11 +782,6 @@ alert("LEO NEW APP.JS 20260919");
         );
       }
 
-      console.log(
-        "LEO: Message created",
-        message
-      );
-
       const {
         data: attachment,
         error: attachmentError
@@ -920,10 +907,6 @@ alert("LEO NEW APP.JS 20260919");
     return url;
   }
 
-  /* =========================================================
-     OPEN ATTACHMENT
-     ========================================================= */
-
   window.openAttachment =
     async (
       path,
@@ -948,10 +931,6 @@ alert("LEO NEW APP.JS 20260919");
         "noopener,noreferrer"
       );
     };
-
-  /* =========================================================
-     RENDER ATTACHMENT
-     ========================================================= */
 
   function renderAttachment(
     attachment
@@ -1016,54 +995,6 @@ alert("LEO NEW APP.JS 20260919");
       `;
     }
 
-    if (
-      attachment.attachment_type ===
-      "video"
-    ) {
-      return `
-        <button
-          class="attachment-file"
-          onclick="
-            openAttachment(
-              decodeURIComponent('${safePath}'),
-              decodeURIComponent('${safeType}')
-            )
-          "
-        >
-          🎥
-          <span>
-            ${esc(
-              attachment.file_name
-            )}
-          </span>
-        </button>
-      `;
-    }
-
-    if (
-      attachment.attachment_type ===
-      "audio"
-    ) {
-      return `
-        <button
-          class="attachment-file"
-          onclick="
-            openAttachment(
-              decodeURIComponent('${safePath}'),
-              decodeURIComponent('${safeType}')
-            )
-          "
-        >
-          🎵
-          <span>
-            ${esc(
-              attachment.file_name
-            )}
-          </span>
-        </button>
-      `;
-    }
-
     return `
       <button
         class="attachment-file"
@@ -1083,10 +1014,6 @@ alert("LEO NEW APP.JS 20260919");
       </button>
     `;
   }
-
-  /* =========================================================
-     PREPARE ATTACHMENT URLS
-     ========================================================= */
 
   async function prepareAttachmentUrls() {
     const all = [];
@@ -1119,10 +1046,6 @@ alert("LEO NEW APP.JS 20260919");
     );
   }
 
-  /* =========================================================
-     POLLING
-     ========================================================= */
-
   function startPolling() {
     clearInterval(poll);
 
@@ -1150,10 +1073,6 @@ alert("LEO NEW APP.JS 20260919");
       5000
     );
   }
-
-  /* =========================================================
-     REALTIME MESSAGES
-     ========================================================= */
 
   async function startMessageRealtime() {
     if (!state.user) return;
@@ -1217,10 +1136,6 @@ alert("LEO NEW APP.JS 20260919");
         .subscribe();
   }
 
-  /* =========================================================
-     LAYOUT
-     ========================================================= */
-
   function layout(
     inner,
     nav = true
@@ -1238,10 +1153,6 @@ alert("LEO NEW APP.JS 20260919");
       </div>
     `;
   }
-
-  /* =========================================================
-     NAVIGATION
-     ========================================================= */
 
   function navBar() {
     const n = [
@@ -1287,10 +1198,6 @@ alert("LEO NEW APP.JS 20260919");
     render();
   };
 
-  /* =========================================================
-     OPEN CHAT BY ID
-     ========================================================= */
-
   window.openChatById =
     async (
       id
@@ -1324,10 +1231,6 @@ alert("LEO NEW APP.JS 20260919");
       );
     };
 
-  /* =========================================================
-     OPEN CHAT
-     ========================================================= */
-
   window.openChat =
     async (
       person
@@ -1342,10 +1245,6 @@ alert("LEO NEW APP.JS 20260919");
       await getMessages();
       await renderChat();
     };
-
-  /* =========================================================
-     LOGOUT
-     ========================================================= */
 
   window.logout =
     async () => {
@@ -1383,10 +1282,6 @@ alert("LEO NEW APP.JS 20260919");
 
       render();
     };
-
-  /* =========================================================
-     AUTH
-     ========================================================= */
 
   function renderAuth() {
     app.innerHTML =
@@ -1522,10 +1417,6 @@ alert("LEO NEW APP.JS 20260919");
       }
     };
 
-  /* =========================================================
-     PROFILE SETUP
-     ========================================================= */
-
   function renderSetup() {
     app.innerHTML =
       layout(
@@ -1635,10 +1526,6 @@ alert("LEO NEW APP.JS 20260919");
 
       render();
     };
-
-  /* =========================================================
-     HOME
-     ========================================================= */
 
   async function renderHome() {
     await Promise.all([
@@ -1826,10 +1713,6 @@ alert("LEO NEW APP.JS 20260919");
       );
   }
 
-  /* =========================================================
-     SEARCH
-     ========================================================= */
-
   function renderSearch() {
     app.innerHTML =
       layout(
@@ -1974,10 +1857,6 @@ alert("LEO NEW APP.JS 20260919");
         </div>
       `;
   }
-
-  /* =========================================================
-     CHAT
-     ========================================================= */
 
   async function renderChat() {
     const p = state.chat;
@@ -2246,10 +2125,6 @@ alert("LEO NEW APP.JS 20260919");
     `;
   }
 
-  /* =========================================================
-     SEND TEXT MESSAGE
-     ========================================================= */
-
   window.sendMsg =
     async () => {
       const el =
@@ -2327,10 +2202,6 @@ alert("LEO NEW APP.JS 20260919");
       }
     };
 
-  /* =========================================================
-     CALLS
-     ========================================================= */
-
   window.callUser =
     (
       kind
@@ -2344,10 +2215,6 @@ alert("LEO NEW APP.JS 20260919");
       );
     };
 
-  /* =========================================================
-     LEAVE CHAT
-     ========================================================= */
-
   window.leaveChat =
     async () => {
       state.chat = null;
@@ -2360,10 +2227,6 @@ alert("LEO NEW APP.JS 20260919");
 
       render();
     };
-
-  /* =========================================================
-     MOMENTS
-     ========================================================= */
 
   function renderMoments() {
     app.innerHTML =
@@ -2503,10 +2366,6 @@ alert("LEO NEW APP.JS 20260919");
       e.target.value = "";
     };
 
-  /* =========================================================
-     CALLS SCREEN
-     ========================================================= */
-
   function renderCalls() {
     app.innerHTML =
       layout(
@@ -2566,10 +2425,6 @@ alert("LEO NEW APP.JS 20260919");
         `
       );
   }
-
-  /* =========================================================
-     SETTINGS
-     ========================================================= */
 
   function renderSettings() {
     app.innerHTML =
@@ -2729,10 +2584,6 @@ alert("LEO NEW APP.JS 20260919");
       );
     };
 
-  /* =========================================================
-     NOTIFICATIONS
-     ========================================================= */
-
   function addNotification(
     title,
     body
@@ -2856,10 +2707,6 @@ alert("LEO NEW APP.JS 20260919");
       );
   }
 
-  /* =========================================================
-     RENDER ROUTER
-     ========================================================= */
-
   async function render() {
     if (!state.user) {
       renderAuth();
@@ -2916,10 +2763,6 @@ alert("LEO NEW APP.JS 20260919");
     await renderHome();
   }
 
-  /* =========================================================
-     AUTH STATE LISTENER
-     ========================================================= */
-
   function startAuthListener() {
     if (authSubscription) {
       return;
@@ -2957,10 +2800,6 @@ alert("LEO NEW APP.JS 20260919");
       data?.subscription ||
       null;
   }
-
-  /* =========================================================
-     BOOT
-     ========================================================= */
 
   async function boot() {
     try {
@@ -3097,10 +2936,6 @@ alert("LEO NEW APP.JS 20260919");
     }
   }
 
-  /* =========================================================
-     PAGE VISIBILITY
-     ========================================================= */
-
   window.addEventListener(
     "beforeunload",
     () => {
@@ -3147,10 +2982,6 @@ alert("LEO NEW APP.JS 20260919");
       }
     }
   );
-
-  /* =========================================================
-     START APP
-     ========================================================= */
 
   boot();
 })();
