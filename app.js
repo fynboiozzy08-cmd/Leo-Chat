@@ -1,3 +1,5 @@
+alert("LEO NEW APP.JS 20260919");
+
 (() => {
   /* =========================================================
      LEO CHAT — WEB APP
@@ -45,19 +47,12 @@
   let state = {
     user: null,
     profile: null,
-
     screen: "home",
-
     chat: null,
-
     profiles: [],
-
     messages: [],
-
     attachments: {},
-
     attachmentUrls: {},
-
     presence: {},
 
     moments: JSON.parse(
@@ -98,16 +93,14 @@
     );
 
   const toast = (message) => {
-    const shell =
-      app.querySelector(".shell");
+    const shell = app.querySelector(".shell");
 
     if (!shell) {
       alert(message);
       return;
     }
 
-    const d =
-      document.createElement("div");
+    const d = document.createElement("div");
 
     d.className = "toast";
     d.textContent = message;
@@ -126,13 +119,10 @@
     if (!value) return "";
 
     try {
-      return new Date(value).toLocaleTimeString(
-        [],
-        {
-          hour: "numeric",
-          minute: "2-digit"
-        }
-      );
+      return new Date(value).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit"
+      });
     } catch {
       return "";
     }
@@ -144,36 +134,26 @@
     }
 
     try {
-      const date =
-        new Date(value);
-
-      const diff =
-        Date.now() - date.getTime();
+      const date = new Date(value);
+      const diff = Date.now() - date.getTime();
 
       if (diff < 60 * 1000) {
         return "last seen just now";
       }
 
       if (diff < 60 * 60 * 1000) {
-        const mins =
-          Math.floor(
-            diff / 60000
-          );
-
+        const mins = Math.floor(diff / 60000);
         return `last seen ${mins} min ago`;
       }
 
       return (
         "last seen " +
-        date.toLocaleString(
-          [],
-          {
-            month: "short",
-            day: "numeric",
-            hour: "numeric",
-            minute: "2-digit"
-          }
-        )
+        date.toLocaleString([], {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit"
+        })
       );
     } catch {
       return "Offline";
@@ -186,17 +166,6 @@
     );
   }
 
-  function getPresenceText(userId) {
-    if (isOnline(userId)) {
-      return "Online";
-    }
-
-    return formatLastSeen(
-      state.presence[userId]
-        ?.last_seen_at
-    );
-  }
-
   function randomId() {
     try {
       return crypto.randomUUID();
@@ -204,19 +173,14 @@
       return (
         Date.now() +
         "-" +
-        Math.random()
-          .toString(36)
-          .slice(2)
+        Math.random().toString(36).slice(2)
       );
     }
   }
 
   function cleanFileName(name) {
     return String(name || "leo-file")
-      .replace(
-        /[^a-zA-Z0-9._-]/g,
-        "_"
-      )
+      .replace(/[^a-zA-Z0-9._-]/g, "_")
       .slice(0, 150);
   }
 
@@ -227,32 +191,23 @@
   async function ensurePresence() {
     if (!state.user) return;
 
-    const now =
-      new Date().toISOString();
+    const now = new Date().toISOString();
 
-    const {
-      error
-    } = await db
+    const { error } = await db
       .from("user_presence")
       .upsert(
         {
-          user_id:
-            state.user.id,
-
+          user_id: state.user.id,
           is_online: true,
-
           last_seen_at: now,
-
           current_activity:
             state.screen === "chat"
               ? "chatting"
               : "online",
-
           updated_at: now
         },
         {
-          onConflict:
-            "user_id"
+          onConflict: "user_id"
         }
       );
 
@@ -267,32 +222,23 @@
   async function updatePresenceActivity() {
     if (!state.user) return;
 
-    const now =
-      new Date().toISOString();
+    const now = new Date().toISOString();
 
-    const {
-      error
-    } = await db
+    const { error } = await db
       .from("user_presence")
       .upsert(
         {
-          user_id:
-            state.user.id,
-
+          user_id: state.user.id,
           is_online: true,
-
           last_seen_at: now,
-
           current_activity:
             state.screen === "chat"
               ? "chatting"
               : "online",
-
           updated_at: now
         },
         {
-          onConflict:
-            "user_id"
+          onConflict: "user_id"
         }
       );
 
@@ -307,26 +253,17 @@
   async function markOffline() {
     if (!state.user) return;
 
-    const now =
-      new Date().toISOString();
+    const now = new Date().toISOString();
 
     try {
-      const {
-        error
-      } = await db
+      const { error } = await db
         .from("user_presence")
-        .update(
-          {
-            is_online: false,
-
-            current_activity:
-              "offline",
-
-            last_seen_at: now,
-
-            updated_at: now
-          }
-        )
+        .update({
+          is_online: false,
+          current_activity: "offline",
+          last_seen_at: now,
+          updated_at: now
+        })
         .eq(
           "user_id",
           state.user.id
@@ -349,10 +286,7 @@
   async function loadPresence() {
     if (!state.user) return;
 
-    const {
-      data,
-      error
-    } = await db
+    const { data, error } = await db
       .from("user_presence")
       .select(
         "user_id,is_online,last_seen_at,current_activity,updated_at"
@@ -366,94 +300,17 @@
       return;
     }
 
-    const existing =
-      state.presence || {};
-
     state.presence = {};
 
-    (data || []).forEach(
-      (item) => {
-        state.presence[
-          item.user_id
-        ] = item;
-      }
-    );
-
-    /*
-      Preserve realtime online state if the
-      database has not caught up yet.
-    */
-
-    Object.keys(existing).forEach(
-      (userId) => {
-        if (
-          existing[userId]
-            ?.is_online &&
-          !state.presence[userId]
-        ) {
-          state.presence[userId] =
-            existing[userId];
-        }
-      }
-    );
-  }
-
-  function syncRealtimePresence() {
-    if (!presenceChannel) {
-      return;
-    }
-
-    try {
-      const presenceState =
-        presenceChannel.presenceState();
-
-      Object.keys(
-        presenceState || {}
-      ).forEach((key) => {
-        const entries =
-          presenceState[key] || [];
-
-        const entry =
-          entries[0];
-
-        const userId =
-          entry?.user_id || key;
-
-        if (!userId) return;
-
-        state.presence[userId] = {
-          ...(state.presence[
-            userId
-          ] || {}),
-
-          user_id: userId,
-
-          is_online: true,
-
-          last_seen_at:
-            entry?.at ||
-            state.presence[userId]
-              ?.last_seen_at ||
-            new Date().toISOString(),
-
-          current_activity:
-            entry?.activity ||
-            "online"
-        };
-      });
-    } catch (error) {
-      console.log(
-        "Presence sync:",
-        error.message
-      );
-    }
+    (data || []).forEach((item) => {
+      state.presence[item.user_id] = item;
+    });
   }
 
   async function startPresence() {
     if (!state.user) return;
 
     await ensurePresence();
-
     await loadPresence();
 
     if (presenceChannel) {
@@ -464,208 +321,149 @@
       } catch {}
     }
 
-    presenceChannel =
-      db.channel(
-        "leo-presence",
-        {
-          config: {
-            presence: {
-              key:
-                state.user.id
-            }
+    presenceChannel = db.channel(
+      "leo-presence",
+      {
+        config: {
+          presence: {
+            key: state.user.id
           }
         }
-      );
+      }
+    );
 
     presenceChannel
       .on(
         "presence",
-        {
-          event: "sync"
-        },
+        { event: "sync" },
         () => {
-          syncRealtimePresence();
+          try {
+            const presenceState =
+              presenceChannel.presenceState();
 
-          if (
-            state.screen ===
-              "home" ||
-            state.screen ===
-              "chat" ||
-            state.screen ===
-              "search"
-          ) {
+            Object.keys(
+              presenceState || {}
+            ).forEach((key) => {
+              const entries =
+                presenceState[key] || [];
+
+              const entry = entries[0];
+
+              const userId =
+                entry?.user_id || key;
+
+              if (!userId) return;
+
+              state.presence[userId] = {
+                ...(state.presence[userId] || {}),
+                user_id: userId,
+                is_online: true,
+                last_seen_at:
+                  entry?.at ||
+                  new Date().toISOString(),
+                current_activity:
+                  entry?.activity ||
+                  "online"
+              };
+            });
+
             render();
+          } catch (error) {
+            console.log(
+              "Presence sync:",
+              error.message
+            );
           }
         }
       )
       .on(
         "presence",
-        {
-          event: "join"
-        },
-        ({
-          key,
-          newPresences
-        }) => {
+        { event: "join" },
+        ({ key, newPresences }) => {
           const entry =
             newPresences?.[0];
 
           const userId =
-            entry?.user_id ||
-            key;
+            entry?.user_id || key;
 
           if (userId) {
-            state.presence[
-              userId
-            ] = {
-              ...(state.presence[
-                userId
-              ] || {}),
-
-              user_id:
-                userId,
-
-              is_online:
-                true,
-
+            state.presence[userId] = {
+              ...(state.presence[userId] || {}),
+              user_id: userId,
+              is_online: true,
               last_seen_at:
                 entry?.at ||
                 new Date().toISOString(),
-
               current_activity:
                 entry?.activity ||
                 "online"
             };
           }
 
-          if (
-            state.screen ===
-              "home" ||
-            state.screen ===
-              "chat" ||
-            state.screen ===
-              "search"
-          ) {
-            render();
-          }
+          render();
         }
       )
       .on(
         "presence",
-        {
-          event: "leave"
-        },
-        ({
-          key,
-          leftPresences
-        }) => {
-          const entry =
-            leftPresences?.[0];
-
-          const userId =
-            entry?.user_id ||
-            key;
-
-          if (userId) {
-            state.presence[
-              userId
-            ] = {
-              ...(state.presence[
-                userId
-              ] || {}),
-
-              user_id:
-                userId,
-
-              is_online:
-                false,
-
+        { event: "leave" },
+        ({ key }) => {
+          if (key) {
+            state.presence[key] = {
+              ...(state.presence[key] || {}),
+              user_id: key,
+              is_online: false,
               last_seen_at:
                 new Date().toISOString(),
-
-              current_activity:
-                "offline"
+              current_activity: "offline"
             };
           }
 
-          if (
-            state.screen ===
-              "home" ||
-            state.screen ===
-              "chat" ||
-            state.screen ===
-              "search"
-          ) {
-            render();
-          }
+          render();
         }
       )
-      .subscribe(
-        async (status) => {
-          if (
-            status ===
-            "SUBSCRIBED"
-          ) {
-            try {
-              await presenceChannel.track(
-                {
-                  user_id:
-                    state.user.id,
-
-                  online: true,
-
-                  activity:
-                    state.screen ===
-                    "chat"
-                      ? "chatting"
-                      : "online",
-
-                  at:
-                    new Date().toISOString()
-                }
-              );
-            } catch (error) {
-              console.log(
-                "Presence track:",
-                error.message
-              );
-            }
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          try {
+            await presenceChannel.track({
+              user_id: state.user.id,
+              online: true,
+              activity:
+                state.screen === "chat"
+                  ? "chatting"
+                  : "online",
+              at: new Date().toISOString()
+            });
+          } catch (error) {
+            console.log(
+              "Presence track:",
+              error.message
+            );
           }
         }
-      );
+      });
 
-    clearInterval(
-      presencePoll
+    clearInterval(presencePoll);
+
+    presencePoll = setInterval(
+      async () => {
+        if (!state.user) return;
+
+        await ensurePresence();
+        await loadPresence();
+
+        if (
+          state.screen === "home" ||
+          state.screen === "search"
+        ) {
+          render();
+        }
+      },
+      10000
     );
-
-    presencePoll =
-      setInterval(
-        async () => {
-          if (!state.user) {
-            return;
-          }
-
-          await ensurePresence();
-          await loadPresence();
-
-          if (
-            state.screen ===
-              "home" ||
-            state.screen ===
-              "search"
-          ) {
-            render();
-          }
-        },
-        10000
-      );
   }
 
   async function stopPresence() {
-    clearInterval(
-      presencePoll
-    );
-
+    clearInterval(presencePoll);
     presencePoll = null;
 
     if (presenceChannel) {
@@ -690,16 +488,10 @@
   async function loadProfile() {
     if (!state.user) return;
 
-    const {
-      data,
-      error
-    } = await db
+    const { data, error } = await db
       .from("profiles")
       .select("*")
-      .eq(
-        "id",
-        state.user.id
-      )
+      .eq("id", state.user.id)
       .maybeSingle();
 
     if (error) {
@@ -709,22 +501,16 @@
       );
     }
 
-    state.profile =
-      data || null;
+    state.profile = data || null;
   }
 
   async function getProfiles() {
     if (!state.user) return;
 
-    const {
-      data,
-      error
-    } = await db
+    const { data, error } = await db
       .from("profiles")
       .select("*")
-      .order(
-        "display_name"
-      );
+      .order("display_name");
 
     if (error) {
       console.log(
@@ -734,8 +520,7 @@
       return;
     }
 
-    state.profiles =
-      data || [];
+    state.profiles = data || [];
   }
 
   /* =========================================================
@@ -743,34 +528,22 @@
      ========================================================= */
 
   async function getMessages() {
-    if (
-      !state.chat ||
-      !state.user
-    ) {
+    if (!state.chat || !state.user) {
       return;
     }
 
-    const a =
-      state.user.id;
+    const a = state.user.id;
+    const b = state.chat.id;
 
-    const b =
-      state.chat.id;
-
-    const {
-      data,
-      error
-    } = await db
+    const { data, error } = await db
       .from("messages")
       .select("*")
       .or(
         `and(sender_id.eq.${a},receiver_id.eq.${b}),and(sender_id.eq.${b},receiver_id.eq.${a})`
       )
-      .order(
-        "created_at",
-        {
-          ascending: true
-        }
-      );
+      .order("created_at", {
+        ascending: true
+      });
 
     if (error) {
       console.log(
@@ -780,8 +553,7 @@
       return;
     }
 
-    state.messages =
-      data || [];
+    state.messages = data || [];
 
     await loadAttachments();
   }
@@ -791,36 +563,22 @@
      ========================================================= */
 
   async function loadAttachments() {
-    if (
-      !state.messages.length
-    ) {
+    if (!state.messages.length) {
       state.attachments = {};
       return;
     }
 
-    const ids =
-      state.messages.map(
-        (m) => m.id
-      );
+    const ids = state.messages.map(
+      (m) => m.id
+    );
 
-    const {
-      data,
-      error
-    } = await db
-      .from(
-        "message_attachments"
-      )
+    const { data, error } = await db
+      .from("message_attachments")
       .select("*")
-      .in(
-        "message_id",
-        ids
-      )
-      .order(
-        "created_at",
-        {
-          ascending: true
-        }
-      );
+      .in("message_id", ids)
+      .order("created_at", {
+        ascending: true
+      });
 
     if (error) {
       console.log(
@@ -832,23 +590,19 @@
 
     state.attachments = {};
 
-    (data || []).forEach(
-      (item) => {
-        if (
-          !state.attachments[
-            item.message_id
-          ]
-        ) {
-          state.attachments[
-            item.message_id
-          ] = [];
-        }
-
+    (data || []).forEach((item) => {
+      if (
+        !state.attachments[item.message_id]
+      ) {
         state.attachments[
           item.message_id
-        ].push(item);
+        ] = [];
       }
-    );
+
+      state.attachments[
+        item.message_id
+      ].push(item);
+    });
   }
 
   /* =========================================================
@@ -856,30 +610,17 @@
      ========================================================= */
 
   function getAttachmentType(file) {
-    const type =
-      file?.type || "";
+    const type = file?.type || "";
 
-    if (
-      type.startsWith(
-        "image/"
-      )
-    ) {
+    if (type.startsWith("image/")) {
       return "image";
     }
 
-    if (
-      type.startsWith(
-        "video/"
-      )
-    ) {
+    if (type.startsWith("video/")) {
       return "video";
     }
 
-    if (
-      type.startsWith(
-        "audio/"
-      )
-    ) {
+    if (type.startsWith("audio/")) {
       return "audio";
     }
 
@@ -901,30 +642,18 @@
      REAL FILE UPLOAD
      ========================================================= */
 
-  async function uploadAttachment(
-    file
-  ) {
-    if (!file) {
-      return;
-    }
+  async function uploadAttachment(file) {
+    if (!file) return;
 
     if (!state.user) {
-      toast(
-        "You are not logged in."
-      );
+      toast("You are not logged in.");
       return;
     }
 
     if (!state.chat) {
-      toast(
-        "Open a chat first."
-      );
+      toast("Open a chat first.");
       return;
     }
-
-    /* -------------------------------------------------------
-       Check active Supabase session
-       ------------------------------------------------------- */
 
     const {
       data: sessionData,
@@ -934,14 +663,13 @@
     if (sessionError) {
       alert(
         "Leo Chat session error:\n\n" +
-        sessionError.message
+          sessionError.message
       );
       return;
     }
 
     if (
-      !sessionData?.session
-        ?.access_token
+      !sessionData?.session?.access_token
     ) {
       alert(
         "Leo Chat:\n\nYour session has expired. Please log in again."
@@ -949,17 +677,10 @@
       return;
     }
 
-    /* -------------------------------------------------------
-       Bucket limit is 50 MB
-       ------------------------------------------------------- */
-
     const MAX_FILE_SIZE =
       50 * 1024 * 1024;
 
-    if (
-      file.size >
-      MAX_FILE_SIZE
-    ) {
+    if (file.size > MAX_FILE_SIZE) {
       alert(
         "Leo Chat:\n\nThis file is larger than the 50 MB limit."
       );
@@ -967,25 +688,12 @@
     }
 
     const attachmentType =
-      getAttachmentType(
-        file
-      );
+      getAttachmentType(file);
 
     const safeName =
-      cleanFileName(
-        file.name
-      );
+      cleanFileName(file.name);
 
-    const uniqueId =
-      randomId();
-
-    /*
-      Storage path:
-
-      USER_ID /
-      UNIQUE_ID /
-      FILE_NAME
-    */
+    const uniqueId = randomId();
 
     const storagePath =
       `${state.user.id}/${uniqueId}/${safeName}`;
@@ -997,23 +705,14 @@
     );
 
     try {
-      /* =====================================================
-         1. UPLOAD REAL FILE TO SUPABASE STORAGE
-         ===================================================== */
-
       console.log(
         "LEO: Starting upload",
         {
-          bucket:
-            MEDIA_BUCKET,
-          path:
-            storagePath,
-          name:
-            file.name,
-          type:
-            file.type,
-          size:
-            file.size
+          bucket: MEDIA_BUCKET,
+          path: storagePath,
+          name: file.name,
+          type: file.type,
+          size: file.size
         }
       );
 
@@ -1021,19 +720,13 @@
         data: uploadData,
         error: uploadError
       } = await db.storage
-        .from(
-          MEDIA_BUCKET
-        )
+        .from(MEDIA_BUCKET)
         .upload(
           storagePath,
           file,
           {
-            cacheControl:
-              "3600",
-
-            upsert:
-              false,
-
+            cacheControl: "3600",
+            upsert: false,
             contentType:
               file.type ||
               "application/octet-stream"
@@ -1049,39 +742,28 @@
       if (uploadError) {
         throw new Error(
           "Storage upload failed: " +
-          uploadError.message
+            uploadError.message
         );
       }
 
-      /* =====================================================
-         2. CREATE MESSAGE
-         ===================================================== */
-
-      let messageLabel =
-        "📎 File";
+      let messageLabel = "📎 File";
 
       if (
-        attachmentType ===
-        "image"
+        attachmentType === "image"
       ) {
-        messageLabel =
-          "📷 Photo";
+        messageLabel = "📷 Photo";
       }
 
       if (
-        attachmentType ===
-        "video"
+        attachmentType === "video"
       ) {
-        messageLabel =
-          "🎥 Video";
+        messageLabel = "🎥 Video";
       }
 
       if (
-        attachmentType ===
-        "audio"
+        attachmentType === "audio"
       ) {
-        messageLabel =
-          "🎵 Audio";
+        messageLabel = "🎵 Audio";
       }
 
       const {
@@ -1090,35 +772,21 @@
       } = await db
         .from("messages")
         .insert({
-          sender_id:
-            state.user.id,
-
-          receiver_id:
-            state.chat.id,
-
-          message:
-            messageLabel
+          sender_id: state.user.id,
+          receiver_id: state.chat.id,
+          message: messageLabel
         })
         .select()
         .single();
 
       if (messageError) {
-        /*
-          If message creation fails, remove the
-          uploaded file.
-        */
-
         await db.storage
-          .from(
-            MEDIA_BUCKET
-          )
-          .remove([
-            storagePath
-          ]);
+          .from(MEDIA_BUCKET)
+          .remove([storagePath]);
 
         throw new Error(
           "Message creation failed: " +
-          messageError.message
+            messageError.message
         );
       }
 
@@ -1127,37 +795,20 @@
         message
       );
 
-      /* =====================================================
-         3. SAVE ATTACHMENT RECORD
-         ===================================================== */
-
       const {
         data: attachment,
         error: attachmentError
       } = await db
-        .from(
-          "message_attachments"
-        )
+        .from("message_attachments")
         .insert({
-          message_id:
-            message.id,
-
-          sender_id:
-            state.user.id,
-
-          file_name:
-            file.name,
-
-          file_path:
-            storagePath,
-
+          message_id: message.id,
+          sender_id: state.user.id,
+          file_name: file.name,
+          file_path: storagePath,
           mime_type:
             file.type ||
             "application/octet-stream",
-
-          file_size:
-            file.size,
-
+          file_size: file.size,
           attachment_type:
             attachmentType
         })
@@ -1165,22 +816,13 @@
         .single();
 
       if (attachmentError) {
-        /*
-          Remove Storage file if metadata
-          creation failed.
-        */
-
         await db.storage
-          .from(
-            MEDIA_BUCKET
-          )
-          .remove([
-            storagePath
-          ]);
+          .from(MEDIA_BUCKET)
+          .remove([storagePath]);
 
         throw new Error(
           "Attachment record failed: " +
-          attachmentError.message
+            attachmentError.message
         );
       }
 
@@ -1188,10 +830,6 @@
         "LEO: Attachment saved",
         attachment
       );
-
-      /*
-        Clear any old cached URL.
-      */
 
       delete state.attachmentUrls[
         storagePath
@@ -1202,7 +840,6 @@
       );
 
       await getMessages();
-
       await renderChat();
 
     } catch (error) {
@@ -1211,18 +848,12 @@
         error
       );
 
-      /*
-        This popup is intentional.
-        If anything fails, it gives the exact
-        Supabase/browser error instead of hiding it.
-      */
-
       alert(
         "Leo Chat attachment error:\n\n" +
-        (
-          error?.message ||
-          String(error)
-        )
+          (
+            error?.message ||
+            String(error)
+          )
       );
     }
   }
@@ -1231,26 +862,15 @@
      SIGNED URL
      ========================================================= */
 
-  async function getAttachmentUrl(
-    path
-  ) {
-    if (!path) {
-      return null;
-    }
+  async function getAttachmentUrl(path) {
+    if (!path) return null;
 
     const cached =
-      state.attachmentUrls[
-        path
-      ];
-
-    /*
-      Signed URLs are cached for 50 minutes.
-    */
+      state.attachmentUrls[path];
 
     if (
       cached &&
-      cached.expiresAt >
-        Date.now()
+      cached.expiresAt > Date.now()
     ) {
       return cached.url;
     }
@@ -1260,17 +880,9 @@
       error: sessionError
     } = await db.auth.getSession();
 
-    if (sessionError) {
-      console.error(
-        "Session error:",
-        sessionError
-      );
-      return null;
-    }
-
     if (
-      !sessionData?.session
-        ?.access_token
+      sessionError ||
+      !sessionData?.session?.access_token
     ) {
       return null;
     }
@@ -1279,9 +891,7 @@
       data,
       error
     } = await db.storage
-      .from(
-        MEDIA_BUCKET
-      )
+      .from(MEDIA_BUCKET)
       .createSignedUrl(
         path,
         3600
@@ -1292,18 +902,14 @@
         "SIGNED URL ERROR:",
         error
       );
-
       return null;
     }
 
     const url =
-      data?.signedUrl ||
-      null;
+      data?.signedUrl || null;
 
     if (url) {
-      state.attachmentUrls[
-        path
-      ] = {
+      state.attachmentUrls[path] = {
         url,
         expiresAt:
           Date.now() +
@@ -1325,14 +931,10 @@
     ) => {
       if (!path) return;
 
-      toast(
-        "Opening..."
-      );
+      toast("Opening...");
 
       const url =
-        await getAttachmentUrl(
-          path
-        );
+        await getAttachmentUrl(path);
 
       if (!url) {
         return toast(
@@ -1364,17 +966,11 @@
         attachment.attachment_type
       );
 
-    /* -------------------------------------------------------
-       IMAGE
-       ------------------------------------------------------- */
-
     if (
       attachment.attachment_type ===
       "image"
     ) {
-      if (
-        attachment.signedUrl
-      ) {
+      if (attachment.signedUrl) {
         return `
           <button
             class="attachment-image"
@@ -1420,10 +1016,6 @@
       `;
     }
 
-    /* -------------------------------------------------------
-       VIDEO
-       ------------------------------------------------------- */
-
     if (
       attachment.attachment_type ===
       "video"
@@ -1448,10 +1040,6 @@
       `;
     }
 
-    /* -------------------------------------------------------
-       AUDIO
-       ------------------------------------------------------- */
-
     if (
       attachment.attachment_type ===
       "audio"
@@ -1475,10 +1063,6 @@
         </button>
       `;
     }
-
-    /* -------------------------------------------------------
-       DOCUMENT / FILE
-       ------------------------------------------------------- */
 
     return `
       <button
@@ -1505,44 +1089,33 @@
      ========================================================= */
 
   async function prepareAttachmentUrls() {
-    const all =
-      [];
+    const all = [];
 
     Object.keys(
       state.attachments
-    ).forEach(
-      (messageId) => {
-        const list =
-          state.attachments[
-            messageId
-          ] || [];
+    ).forEach((messageId) => {
+      const list =
+        state.attachments[
+          messageId
+        ] || [];
 
-        list.forEach(
-          (attachment) => {
-            if (
-              attachment.attachment_type ===
-              "image"
-            ) {
-              all.push(
-                attachment
-              );
-            }
-          }
-        );
-      }
-    );
+      list.forEach((attachment) => {
+        if (
+          attachment.attachment_type ===
+          "image"
+        ) {
+          all.push(attachment);
+        }
+      });
+    });
 
     await Promise.all(
-      all.map(
-        async (
-          attachment
-        ) => {
-          attachment.signedUrl =
-            await getAttachmentUrl(
-              attachment.file_path
-            );
-        }
-      )
+      all.map(async (attachment) => {
+        attachment.signedUrl =
+          await getAttachmentUrl(
+            attachment.file_path
+          );
+      })
     );
   }
 
@@ -1551,42 +1124,31 @@
      ========================================================= */
 
   function startPolling() {
-    clearInterval(
-      poll
+    clearInterval(poll);
+
+    poll = setInterval(
+      async () => {
+        if (
+          state.screen ===
+          "chat"
+        ) {
+          await getMessages();
+          await loadPresence();
+          await renderChat();
+        }
+
+        if (
+          state.screen ===
+            "home" ||
+          state.screen ===
+            "search"
+        ) {
+          await loadPresence();
+          render();
+        }
+      },
+      5000
     );
-
-    poll =
-      setInterval(
-        async () => {
-          if (
-            state.screen ===
-            "chat"
-          ) {
-            await getMessages();
-
-            await loadPresence();
-
-            renderChat();
-          }
-
-          if (
-            state.screen ===
-              "home" ||
-            state.screen ===
-              "search"
-          ) {
-            await loadPresence();
-
-            /*
-              Only rerender the home/search screen
-              periodically when needed.
-            */
-
-            render();
-          }
-        },
-        5000
-      );
   }
 
   /* =========================================================
@@ -1625,7 +1187,6 @@
               "chat"
             ) {
               await getMessages();
-
               await renderChat();
             } else {
               addNotification(
@@ -1649,7 +1210,6 @@
               "chat"
             ) {
               await getMessages();
-
               await renderChat();
             }
           }
@@ -1685,31 +1245,11 @@
 
   function navBar() {
     const n = [
-      [
-        "home",
-        "💬",
-        "Chats"
-      ],
-      [
-        "search",
-        "⌕",
-        "Search"
-      ],
-      [
-        "moments",
-        "✦",
-        "Moments"
-      ],
-      [
-        "calls",
-        "☎",
-        "Calls"
-      ],
-      [
-        "settings",
-        "⚙",
-        "Settings"
-      ]
+      ["home", "💬", "Chats"],
+      ["search", "⌕", "Search"],
+      ["moments", "✦", "Moments"],
+      ["calls", "☎", "Calls"],
+      ["settings", "⚙", "Settings"]
     ];
 
     return `
@@ -1739,20 +1279,16 @@
     `;
   }
 
-  window.go =
-    async (
-      screen
-    ) => {
-      state.screen =
-        screen;
+  window.go = async (screen) => {
+    state.screen = screen;
 
-      await updatePresenceActivity();
+    await updatePresenceActivity();
 
-      render();
-    };
+    render();
+  };
 
   /* =========================================================
-     OPEN CHAT BY PROFILE ID
+     OPEN CHAT BY ID
      ========================================================= */
 
   window.openChatById =
@@ -1761,8 +1297,7 @@
     ) => {
       const person =
         state.profiles.find(
-          (p) =>
-            p.id === id
+          (p) => p.id === id
         );
 
       if (!person) {
@@ -1770,8 +1305,7 @@
 
         const found =
           state.profiles.find(
-            (p) =>
-              p.id === id
+            (p) => p.id === id
           );
 
         if (!found) {
@@ -1798,25 +1332,14 @@
     async (
       person
     ) => {
-      state.chat =
-        person;
-
-      state.screen =
-        "chat";
-
-      state.messages =
-        [];
-
-      state.attachments =
-        {};
-
-      state.attachmentUrls =
-        {};
+      state.chat = person;
+      state.screen = "chat";
+      state.messages = [];
+      state.attachments = {};
+      state.attachmentUrls = {};
 
       await updatePresenceActivity();
-
       await getMessages();
-
       await renderChat();
     };
 
@@ -1839,45 +1362,24 @@
           );
         } catch {}
 
-        messageChannel =
-          null;
+        messageChannel = null;
       }
 
-      clearInterval(
-        poll
-      );
-
-      clearInterval(
-        presencePoll
-      );
+      clearInterval(poll);
+      clearInterval(presencePoll);
 
       try {
         await db.auth.signOut();
       } catch {}
 
-      state.user =
-        null;
-
-      state.profile =
-        null;
-
-      state.chat =
-        null;
-
-      state.messages =
-        [];
-
-      state.attachments =
-        {};
-
-      state.attachmentUrls =
-        {};
-
-      state.presence =
-        {};
-
-      state.screen =
-        "home";
+      state.user = null;
+      state.profile = null;
+      state.chat = null;
+      state.messages = [];
+      state.attachments = {};
+      state.attachmentUrls = {};
+      state.presence = {};
+      state.screen = "home";
 
       render();
     };
@@ -1957,51 +1459,38 @@
     ) => {
       const email =
         document
-          .getElementById(
-            "email"
-          )
+          .getElementById("email")
           ?.value
           .trim();
 
       const password =
         document
-          .getElementById(
-            "pass"
-          )
+          .getElementById("pass")
           ?.value;
 
-      if (
-        !email ||
-        !password
-      ) {
+      if (!email || !password) {
         return toast(
           "Enter email and password."
         );
       }
 
       toast(
-        mode ===
-          "signup"
+        mode === "signup"
           ? "Creating account..."
           : "Signing in..."
       );
 
       try {
         const r =
-          mode ===
-          "signup"
-            ? await db.auth.signUp(
-                {
-                  email,
-                  password
-                }
-              )
-            : await db.auth.signInWithPassword(
-                {
-                  email,
-                  password
-                }
-              );
+          mode === "signup"
+            ? await db.auth.signUp({
+                email,
+                password
+              })
+            : await db.auth.signInWithPassword({
+                email,
+                password
+              });
 
         if (r.error) {
           return toast(
@@ -2019,11 +1508,8 @@
         }
 
         await loadProfile();
-
         await startPresence();
-
         await startMessageRealtime();
-
         startPolling();
 
         render();
@@ -2094,25 +1580,18 @@
     async () => {
       const username =
         document
-          .getElementById(
-            "uname"
-          )
+          .getElementById("uname")
           ?.value
           .trim()
           .toLowerCase();
 
       const display_name =
         document
-          .getElementById(
-            "dname"
-          )
+          .getElementById("dname")
           ?.value
           .trim();
 
-      if (
-        !username ||
-        !display_name
-      ) {
+      if (!username || !display_name) {
         return toast(
           "Complete your profile."
         );
@@ -2124,9 +1603,7 @@
           ""
         );
 
-      if (
-        !cleanUsername
-      ) {
+      if (!cleanUsername) {
         return toast(
           "Username must contain letters, numbers or underscores."
         );
@@ -2138,16 +1615,10 @@
       } = await db
         .from("profiles")
         .insert({
-          id:
-            state.user.id,
-
-          username:
-            cleanUsername,
-
+          id: state.user.id,
+          username: cleanUsername,
           display_name,
-
-          avatar:
-            "🦁"
+          avatar: "🦁"
         })
         .select()
         .single();
@@ -2158,8 +1629,7 @@
         );
       }
 
-      state.profile =
-        data;
+      state.profile = data;
 
       await ensurePresence();
 
@@ -2176,18 +1646,14 @@
       loadPresence()
     ]);
 
-    if (
-      state.screen !==
-      "home"
-    ) {
+    if (state.screen !== "home") {
       return;
     }
 
     const people =
       state.profiles.filter(
         (p) =>
-          p.id !==
-          state.user.id
+          p.id !== state.user.id
       );
 
     app.innerHTML =
@@ -2274,9 +1740,7 @@
                 people.length
                   ? people
                       .map(
-                        (
-                          p
-                        ) => {
+                        (p) => {
                           const online =
                             isOnline(
                               p.id
@@ -2414,9 +1878,7 @@
     const q =
       (
         document
-          .getElementById(
-            "q"
-          )
+          .getElementById("q")
           ?.value ||
         ""
       ).toLowerCase();
@@ -2424,8 +1886,7 @@
     const arr =
       state.profiles.filter(
         (p) =>
-          p.id !==
-            state.user.id &&
+          p.id !== state.user.id &&
           `${p.display_name} ${p.username}`
             .toLowerCase()
             .includes(q)
@@ -2443,9 +1904,7 @@
         .map(
           (p) => {
             const online =
-              isOnline(
-                p.id
-              );
+              isOnline(p.id);
 
             return `
               <div
@@ -2521,25 +1980,19 @@
      ========================================================= */
 
   async function renderChat() {
-    const p =
-      state.chat;
+    const p = state.chat;
 
     if (!p) {
-      state.screen =
-        "home";
-
+      state.screen = "home";
       return renderHome();
     }
 
     await prepareAttachmentUrls();
 
-    const msgs =
-      state.messages;
+    const msgs = state.messages;
 
     const online =
-      isOnline(
-        p.id
-      );
+      isOnline(p.id);
 
     app.innerHTML =
       layout(
@@ -2630,9 +2083,7 @@
                   ? msgs
                       .map(
                         (m) =>
-                          renderMessage(
-                            m
-                          )
+                          renderMessage(m)
                       )
                       .join("")
                   : `
@@ -2714,25 +2165,20 @@
         false
       );
 
-    setTimeout(
-      () => {
-        const m =
-          document.getElementById(
-            "messages"
-          );
+    setTimeout(() => {
+      const m =
+        document.getElementById(
+          "messages"
+        );
 
-        if (m) {
-          m.scrollTop =
-            m.scrollHeight;
-        }
-      },
-      30
-    );
+      if (m) {
+        m.scrollTop =
+          m.scrollHeight;
+      }
+    }, 30);
   }
 
-  function renderMessage(
-    message
-  ) {
+  function renderMessage(message) {
     const mine =
       message.sender_id ===
       state.user.id;
@@ -2771,9 +2217,7 @@
                 >
                   ${list
                     .map(
-                      (
-                        attachment
-                      ) =>
+                      (attachment) =>
                         renderAttachment(
                           attachment
                         )
@@ -2816,9 +2260,7 @@
       const text =
         el?.value.trim();
 
-      if (!text) {
-        return;
-      }
+      if (!text) return;
 
       if (
         !state.user ||
@@ -2829,24 +2271,19 @@
 
       el.value = "";
 
-      const {
-        error
-      } = await db
-        .from("messages")
-        .insert({
-          sender_id:
-            state.user.id,
-
-          receiver_id:
-            state.chat.id,
-
-          message:
-            text
-        });
+      const { error } =
+        await db
+          .from("messages")
+          .insert({
+            sender_id:
+              state.user.id,
+            receiver_id:
+              state.chat.id,
+            message: text
+          });
 
       if (error) {
-        el.value =
-          text;
+        el.value = text;
 
         return toast(
           error.message
@@ -2854,9 +2291,7 @@
       }
 
       await getMessages();
-
       await renderChat();
-
       await updatePresenceActivity();
     };
 
@@ -2874,12 +2309,7 @@
             []
         );
 
-      /*
-        Clear input immediately.
-      */
-
-      event.target.value =
-        "";
+      event.target.value = "";
 
       if (!files.length) {
         return;
@@ -2917,20 +2347,11 @@
 
   window.leaveChat =
     async () => {
-      state.chat =
-        null;
-
-      state.messages =
-        [];
-
-      state.attachments =
-        {};
-
-      state.attachmentUrls =
-        {};
-
-      state.screen =
-        "home";
+      state.chat = null;
+      state.messages = [];
+      state.attachments = {};
+      state.attachmentUrls = {};
+      state.screen = "home";
 
       await updatePresenceActivity();
 
@@ -3059,13 +2480,9 @@
           ) || "";
 
         state.moments.unshift({
-          src:
-            r.result,
-
+          src: r.result,
           text,
-
-          at:
-            Date.now()
+          at: Date.now()
         });
 
         localStorage.setItem(
@@ -3080,8 +2497,7 @@
 
       r.readAsDataURL(f);
 
-      e.target.value =
-        "";
+      e.target.value = "";
     };
 
   /* =========================================================
@@ -3319,8 +2735,7 @@
     body
   ) {
     if (
-      !state.settings
-        .messages
+      !state.settings.messages
     ) {
       return;
     }
@@ -3328,8 +2743,7 @@
     state.notifications.unshift({
       title,
       body,
-      at:
-        Date.now()
+      at: Date.now()
     });
 
     state.notifications =
@@ -3349,9 +2763,7 @@
       state.screen !==
       "notifications"
     ) {
-      toast(
-        title
-      );
+      toast(title);
     }
   }
 
@@ -3457,48 +2869,42 @@
     }
 
     if (
-      state.screen ===
-      "chat"
+      state.screen === "chat"
     ) {
       await renderChat();
       return;
     }
 
     if (
-      state.screen ===
-      "search"
+      state.screen === "search"
     ) {
       renderSearch();
       return;
     }
 
     if (
-      state.screen ===
-      "moments"
+      state.screen === "moments"
     ) {
       renderMoments();
       return;
     }
 
     if (
-      state.screen ===
-      "calls"
+      state.screen === "calls"
     ) {
       renderCalls();
       return;
     }
 
     if (
-      state.screen ===
-      "settings"
+      state.screen === "settings"
     ) {
       renderSettings();
       return;
     }
 
     if (
-      state.screen ===
-      "notifications"
+      state.screen === "notifications"
     ) {
       renderNotifications();
       return;
@@ -3516,9 +2922,7 @@
       return;
     }
 
-    const {
-      data
-    } =
+    const { data } =
       db.auth.onAuthStateChange(
         async (
           event,
@@ -3528,24 +2932,15 @@
             session?.user ||
             null;
 
-          if (
-            state.user
-          ) {
+          if (state.user) {
             await loadProfile();
-
             await startPresence();
-
             await startMessageRealtime();
-
             startPolling();
           } else {
-            state.profile =
-              null;
+            state.profile = null;
 
-            clearInterval(
-              poll
-            );
-
+            clearInterval(poll);
             clearInterval(
               presencePoll
             );
@@ -3639,15 +3034,10 @@
         data?.session?.user ||
         null;
 
-      if (
-        state.user
-      ) {
+      if (state.user) {
         await loadProfile();
-
         await startPresence();
-
         await startMessageRealtime();
-
         startPolling();
       }
 
@@ -3711,11 +3101,6 @@
   window.addEventListener(
     "beforeunload",
     () => {
-      /*
-        Best effort only.
-        Realtime presence also handles leaving.
-      */
-
       if (state.user) {
         markOffline();
       }
@@ -3735,27 +3120,23 @@
       ) {
         await ensurePresence();
 
-        if (
-          presenceChannel
-        ) {
+        if (presenceChannel) {
           try {
-            await presenceChannel.track(
-              {
-                user_id:
-                  state.user.id,
+            await presenceChannel.track({
+              user_id:
+                state.user.id,
 
-                online: true,
+              online: true,
 
-                activity:
-                  state.screen ===
-                  "chat"
-                    ? "chatting"
-                    : "online",
+              activity:
+                state.screen ===
+                "chat"
+                  ? "chatting"
+                  : "online",
 
-                at:
-                  new Date().toISOString()
-              }
-            );
+              at:
+                new Date().toISOString()
+            });
           } catch {}
         }
       } else {
