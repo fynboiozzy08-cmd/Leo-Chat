@@ -2,31 +2,134 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#050505">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Leo Chat">
 
-  <title>Leo Chat — Roar v7</title>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  >
 
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="icon" href="./logo.svg">
-  <link rel="apple-touch-icon" href="./logo.svg">
+  <meta
+    name="theme-color"
+    content="#050505"
+  >
 
-  <link rel="stylesheet" href="./styles.css">
+  <meta
+    name="apple-mobile-web-app-capable"
+    content="yes"
+  >
+
+  <meta
+    name="apple-mobile-web-app-status-bar-style"
+    content="black-translucent"
+  >
+
+  <meta
+    name="apple-mobile-web-app-title"
+    content="Leo Chat"
+  >
+
+  <title>Leo Chat</title>
+
+  <link
+    rel="manifest"
+    href="./manifest.webmanifest?v=20260919"
+  >
+
+  <link
+    rel="apple-touch-icon"
+    href="./logo.svg?v=20260919"
+  >
+
+  <link
+    rel="icon"
+    type="image/svg+xml"
+    href="./logo.svg?v=20260919"
+  >
+
+  <link
+    rel="stylesheet"
+    href="./styles.css?v=20260919"
+  >
 </head>
 
 <body>
-  <div id="app"></div>
 
-  <!-- Supabase -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <div id="app">
+    <div
+      style="
+        min-height:100vh;
+        background:#050505;
+        color:#D4AF37;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        flex-direction:column;
+        font-family:Arial,sans-serif;
+        text-align:center;
+        padding:25px;
+      "
+    >
+      <div style="font-size:60px;">
+        🦁
+      </div>
 
-  <!-- Leo Chat configuration -->
-  <script src="./config.js?v=12"></script>
+      <h2>
+        Leo Chat
+      </h2>
 
-  <!-- Leo Chat application -->
-  <script src="./app.js?v=12"></script>
+      <p style="color:#777;">
+        Starting Leo Chat...
+      </p>
+    </div>
+  </div>
+
+  <!-- =====================================================
+       SUPABASE
+       ===================================================== -->
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
+  ></script>
+
+  <!-- =====================================================
+       LEO CONFIG
+       ===================================================== -->
+
+  <script src="./config.js?v=20260919"></script>
+
+  <!-- =====================================================
+       LEO CHAT APP
+       
+       IMPORTANT:
+       The version number forces Safari/GitHub Pages
+       to load the newest app.js instead of an old cache.
+       ===================================================== -->
+
+  <script src="./app.js?v=20260919"></script>
+
+  <!-- =====================================================
+       SERVICE WORKER
+       ===================================================== -->
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker
+          .register("./sw.js?v=20260919")
+          .then(() => {
+            console.log(
+              "Leo Chat service worker registered."
+            );
+          })
+          .catch((error) => {
+            console.log(
+              "Service worker registration failed:",
+              error
+            );
+          });
+      });
+    }
+  </script>
+
 </body>
 </html>
