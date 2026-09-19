@@ -1,16 +1,15 @@
 (() => {
   /* =========================================================
      LEO CHAT — WEB APP
-     Real attachments + realtime presence
+     Real Supabase attachments + presence
      ========================================================= */
 
   const cfg = window.LEO_CONFIG || {};
-
   const app = document.getElementById("app");
 
-  /* ---------------------------------------------------------
+  /* =========================================================
      SUPABASE
-     --------------------------------------------------------- */
+     ========================================================= */
 
   if (
     !window.supabase ||
@@ -32,12 +31,12 @@
     return;
   }
 
-  const { createClient } = window.supabase;
-
-  const db = createClient(
+  const db = window.supabase.createClient(
     cfg.SUPABASE_URL,
     cfg.SUPABASE_KEY
   );
+
+  const MEDIA_BUCKET = "chat-media";
 
   /* =========================================================
      APP STATE
@@ -57,6 +56,8 @@
 
     attachments: {},
 
+    attachmentUrls: {},
+
     presence: {},
 
     moments: JSON.parse(
@@ -74,11 +75,9 @@
   };
 
   let poll = null;
-
+  let presencePoll = null;
   let messageChannel = null;
-
   let presenceChannel = null;
-
   let authSubscription = null;
 
   /* =========================================================
@@ -99,19 +98,25 @@
     );
 
   const toast = (message) => {
-    const d = document.createElement("div");
+    const shell =
+      app.querySelector(".shell");
+
+    if (!shell) {
+      alert(message);
+      return;
+    }
+
+    const d =
+      document.createElement("div");
 
     d.className = "toast";
-
     d.textContent = message;
 
-    app
-      .querySelector(".shell")
-      ?.appendChild(d);
+    shell.appendChild(d);
 
     setTimeout(() => {
       d.remove();
-    }, 2500);
+    }, 3000);
   };
 
   const icon = (x) =>
@@ -139,16 +144,36 @@
     }
 
     try {
-      const date = new Date(value);
+      const date =
+        new Date(value);
+
+      const diff =
+        Date.now() - date.getTime();
+
+      if (diff < 60 * 1000) {
+        return "last seen just now";
+      }
+
+      if (diff < 60 * 60 * 1000) {
+        const mins =
+          Math.floor(
+            diff / 60000
+          );
+
+        return `last seen ${mins} min ago`;
+      }
 
       return (
         "last seen " +
-        date.toLocaleString([], {
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit"
-        })
+        date.toLocaleString(
+          [],
+          {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit"
+          }
+        )
       );
     } catch {
       return "Offline";
@@ -161,6 +186,40 @@
     );
   }
 
+  function getPresenceText(userId) {
+    if (isOnline(userId)) {
+      return "Online";
+    }
+
+    return formatLastSeen(
+      state.presence[userId]
+        ?.last_seen_at
+    );
+  }
+
+  function randomId() {
+    try {
+      return crypto.randomUUID();
+    } catch {
+      return (
+        Date.now() +
+        "-" +
+        Math.random()
+          .toString(36)
+          .slice(2)
+      );
+    }
+  }
+
+  function cleanFileName(name) {
+    return String(name || "leo-file")
+      .replace(
+        /[^a-zA-Z0-9._-]/g,
+        "_"
+      )
+      .slice(0, 150);
+  }
+
   /* =========================================================
      PRESENCE
      ========================================================= */
@@ -168,23 +227,32 @@
   async function ensurePresence() {
     if (!state.user) return;
 
-    const now = new Date().toISOString();
+    const now =
+      new Date().toISOString();
 
-    const { error } = await db
+    const {
+      error
+    } = await db
       .from("user_presence")
       .upsert(
         {
-          user_id: state.user.id,
+          user_id:
+            state.user.id,
+
           is_online: true,
+
           last_seen_at: now,
+
           current_activity:
             state.screen === "chat"
               ? "chatting"
               : "online",
+
           updated_at: now
         },
         {
-          onConflict: "user_id"
+          onConflict:
+            "user_id"
         }
       );
 
@@ -199,48 +267,80 @@
   async function updatePresenceActivity() {
     if (!state.user) return;
 
-    const now = new Date().toISOString();
+    const now =
+      new Date().toISOString();
 
-    await db
+    const {
+      error
+    } = await db
       .from("user_presence")
       .upsert(
         {
-          user_id: state.user.id,
+          user_id:
+            state.user.id,
+
           is_online: true,
+
           last_seen_at: now,
+
           current_activity:
             state.screen === "chat"
               ? "chatting"
               : "online",
+
           updated_at: now
         },
         {
-          onConflict: "user_id"
+          onConflict:
+            "user_id"
         }
       );
+
+    if (error) {
+      console.log(
+        "Presence activity:",
+        error.message
+      );
+    }
   }
 
   async function markOffline() {
     if (!state.user) return;
 
+    const now =
+      new Date().toISOString();
+
     try {
-      await db
+      const {
+        error
+      } = await db
         .from("user_presence")
-        .update({
-          is_online: false,
-          current_activity: "offline",
-          last_seen_at:
-            new Date().toISOString(),
-          updated_at:
-            new Date().toISOString()
-        })
+        .update(
+          {
+            is_online: false,
+
+            current_activity:
+              "offline",
+
+            last_seen_at: now,
+
+            updated_at: now
+          }
+        )
         .eq(
           "user_id",
           state.user.id
         );
+
+      if (error) {
+        console.log(
+          "Offline update:",
+          error.message
+        );
+      }
     } catch (error) {
       console.log(
-        "Offline update:",
+        "Offline error:",
         error.message
       );
     }
@@ -249,12 +349,14 @@
   async function loadPresence() {
     if (!state.user) return;
 
-    const { data, error } =
-      await db
-        .from("user_presence")
-        .select(
-          "user_id,is_online,last_seen_at,current_activity,updated_at"
-        );
+    const {
+      data,
+      error
+    } = await db
+      .from("user_presence")
+      .select(
+        "user_id,is_online,last_seen_at,current_activity,updated_at"
+      );
 
     if (error) {
       console.log(
@@ -264,12 +366,87 @@
       return;
     }
 
+    const existing =
+      state.presence || {};
+
     state.presence = {};
 
-    (data || []).forEach((item) => {
-      state.presence[item.user_id] =
-        item;
-    });
+    (data || []).forEach(
+      (item) => {
+        state.presence[
+          item.user_id
+        ] = item;
+      }
+    );
+
+    /*
+      Preserve realtime online state if the
+      database has not caught up yet.
+    */
+
+    Object.keys(existing).forEach(
+      (userId) => {
+        if (
+          existing[userId]
+            ?.is_online &&
+          !state.presence[userId]
+        ) {
+          state.presence[userId] =
+            existing[userId];
+        }
+      }
+    );
+  }
+
+  function syncRealtimePresence() {
+    if (!presenceChannel) {
+      return;
+    }
+
+    try {
+      const presenceState =
+        presenceChannel.presenceState();
+
+      Object.keys(
+        presenceState || {}
+      ).forEach((key) => {
+        const entries =
+          presenceState[key] || [];
+
+        const entry =
+          entries[0];
+
+        const userId =
+          entry?.user_id || key;
+
+        if (!userId) return;
+
+        state.presence[userId] = {
+          ...(state.presence[
+            userId
+          ] || {}),
+
+          user_id: userId,
+
+          is_online: true,
+
+          last_seen_at:
+            entry?.at ||
+            state.presence[userId]
+              ?.last_seen_at ||
+            new Date().toISOString(),
+
+          current_activity:
+            entry?.activity ||
+            "online"
+        };
+      });
+    } catch (error) {
+      console.log(
+        "Presence sync:",
+        error.message
+      );
+    }
   }
 
   async function startPresence() {
@@ -280,20 +457,25 @@
     await loadPresence();
 
     if (presenceChannel) {
-      await db
-        .removeChannel(
+      try {
+        await db.removeChannel(
           presenceChannel
         );
+      } catch {}
     }
 
-    presenceChannel = db
-      .channel("leo-presence", {
-        config: {
-          presence: {
-            key: state.user.id
+    presenceChannel =
+      db.channel(
+        "leo-presence",
+        {
+          config: {
+            presence: {
+              key:
+                state.user.id
+            }
           }
         }
-      });
+      );
 
     presenceChannel
       .on(
@@ -301,13 +483,16 @@
         {
           event: "sync"
         },
-        async () => {
-          await loadPresence();
+        () => {
+          syncRealtimePresence();
 
           if (
-            state.screen === "home" ||
-            state.screen === "chat" ||
-            state.screen === "search"
+            state.screen ===
+              "home" ||
+            state.screen ===
+              "chat" ||
+            state.screen ===
+              "search"
           ) {
             render();
           }
@@ -318,13 +503,48 @@
         {
           event: "join"
         },
-        async () => {
-          await loadPresence();
+        ({
+          key,
+          newPresences
+        }) => {
+          const entry =
+            newPresences?.[0];
+
+          const userId =
+            entry?.user_id ||
+            key;
+
+          if (userId) {
+            state.presence[
+              userId
+            ] = {
+              ...(state.presence[
+                userId
+              ] || {}),
+
+              user_id:
+                userId,
+
+              is_online:
+                true,
+
+              last_seen_at:
+                entry?.at ||
+                new Date().toISOString(),
+
+              current_activity:
+                entry?.activity ||
+                "online"
+            };
+          }
 
           if (
-            state.screen === "home" ||
-            state.screen === "chat" ||
-            state.screen === "search"
+            state.screen ===
+              "home" ||
+            state.screen ===
+              "chat" ||
+            state.screen ===
+              "search"
           ) {
             render();
           }
@@ -335,13 +555,46 @@
         {
           event: "leave"
         },
-        async () => {
-          await loadPresence();
+        ({
+          key,
+          leftPresences
+        }) => {
+          const entry =
+            leftPresences?.[0];
+
+          const userId =
+            entry?.user_id ||
+            key;
+
+          if (userId) {
+            state.presence[
+              userId
+            ] = {
+              ...(state.presence[
+                userId
+              ] || {}),
+
+              user_id:
+                userId,
+
+              is_online:
+                false,
+
+              last_seen_at:
+                new Date().toISOString(),
+
+              current_activity:
+                "offline"
+            };
+          }
 
           if (
-            state.screen === "home" ||
-            state.screen === "chat" ||
-            state.screen === "search"
+            state.screen ===
+              "home" ||
+            state.screen ===
+              "chat" ||
+            state.screen ===
+              "search"
           ) {
             render();
           }
@@ -349,18 +602,26 @@
       )
       .subscribe(
         async (status) => {
-          if (status === "SUBSCRIBED") {
+          if (
+            status ===
+            "SUBSCRIBED"
+          ) {
             try {
               await presenceChannel.track(
                 {
                   user_id:
                     state.user.id,
+
                   online: true,
+
                   activity:
-                    state.screen === "chat"
+                    state.screen ===
+                    "chat"
                       ? "chatting"
                       : "online",
-                  at: new Date().toISOString()
+
+                  at:
+                    new Date().toISOString()
                 }
               );
             } catch (error) {
@@ -372,6 +633,54 @@
           }
         }
       );
+
+    clearInterval(
+      presencePoll
+    );
+
+    presencePoll =
+      setInterval(
+        async () => {
+          if (!state.user) {
+            return;
+          }
+
+          await ensurePresence();
+          await loadPresence();
+
+          if (
+            state.screen ===
+              "home" ||
+            state.screen ===
+              "search"
+          ) {
+            render();
+          }
+        },
+        10000
+      );
+  }
+
+  async function stopPresence() {
+    clearInterval(
+      presencePoll
+    );
+
+    presencePoll = null;
+
+    if (presenceChannel) {
+      try {
+        await presenceChannel.untrack();
+      } catch {}
+
+      try {
+        await db.removeChannel(
+          presenceChannel
+        );
+      } catch {}
+
+      presenceChannel = null;
+    }
   }
 
   /* =========================================================
@@ -381,12 +690,17 @@
   async function loadProfile() {
     if (!state.user) return;
 
-    const { data, error } =
-      await db
-        .from("profiles")
-        .select("*")
-        .eq("id", state.user.id)
-        .maybeSingle();
+    const {
+      data,
+      error
+    } = await db
+      .from("profiles")
+      .select("*")
+      .eq(
+        "id",
+        state.user.id
+      )
+      .maybeSingle();
 
     if (error) {
       console.log(
@@ -395,17 +709,22 @@
       );
     }
 
-    state.profile = data || null;
+    state.profile =
+      data || null;
   }
 
   async function getProfiles() {
     if (!state.user) return;
 
-    const { data, error } =
-      await db
-        .from("profiles")
-        .select("*")
-        .order("display_name");
+    const {
+      data,
+      error
+    } = await db
+      .from("profiles")
+      .select("*")
+      .order(
+        "display_name"
+      );
 
     if (error) {
       console.log(
@@ -415,7 +734,8 @@
       return;
     }
 
-    state.profiles = data || [];
+    state.profiles =
+      data || [];
   }
 
   /* =========================================================
@@ -423,24 +743,34 @@
      ========================================================= */
 
   async function getMessages() {
-    if (!state.chat || !state.user) {
+    if (
+      !state.chat ||
+      !state.user
+    ) {
       return;
     }
 
-    const a = state.user.id;
+    const a =
+      state.user.id;
 
-    const b = state.chat.id;
+    const b =
+      state.chat.id;
 
-    const { data, error } =
-      await db
-        .from("messages")
-        .select("*")
-        .or(
-          `and(sender_id.eq.${a},receiver_id.eq.${b}),and(sender_id.eq.${b},receiver_id.eq.${a})`
-        )
-        .order("created_at", {
+    const {
+      data,
+      error
+    } = await db
+      .from("messages")
+      .select("*")
+      .or(
+        `and(sender_id.eq.${a},receiver_id.eq.${b}),and(sender_id.eq.${b},receiver_id.eq.${a})`
+      )
+      .order(
+        "created_at",
+        {
           ascending: true
-        });
+        }
+      );
 
     if (error) {
       console.log(
@@ -450,33 +780,47 @@
       return;
     }
 
-    state.messages = data || [];
+    state.messages =
+      data || [];
 
     await loadAttachments();
   }
 
   /* =========================================================
-     REAL ATTACHMENT RECORDS
+     ATTACHMENT RECORDS
      ========================================================= */
 
   async function loadAttachments() {
-    if (!state.messages.length) {
+    if (
+      !state.messages.length
+    ) {
       state.attachments = {};
       return;
     }
 
-    const ids = state.messages.map(
-      (m) => m.id
-    );
+    const ids =
+      state.messages.map(
+        (m) => m.id
+      );
 
-    const { data, error } =
-      await db
-        .from("message_attachments")
-        .select("*")
-        .in("message_id", ids)
-        .order("created_at", {
+    const {
+      data,
+      error
+    } = await db
+      .from(
+        "message_attachments"
+      )
+      .select("*")
+      .in(
+        "message_id",
+        ids
+      )
+      .order(
+        "created_at",
+        {
           ascending: true
-        });
+        }
+      );
 
     if (error) {
       console.log(
@@ -488,16 +832,23 @@
 
     state.attachments = {};
 
-    (data || []).forEach((item) => {
-      if (!state.attachments[item.message_id]) {
-        state.attachments[item.message_id] =
-          [];
-      }
+    (data || []).forEach(
+      (item) => {
+        if (
+          !state.attachments[
+            item.message_id
+          ]
+        ) {
+          state.attachments[
+            item.message_id
+          ] = [];
+        }
 
-      state.attachments[item.message_id].push(
-        item
-      );
-    });
+        state.attachments[
+          item.message_id
+        ].push(item);
+      }
+    );
   }
 
   /* =========================================================
@@ -506,17 +857,29 @@
 
   function getAttachmentType(file) {
     const type =
-      file.type || "";
+      file?.type || "";
 
-    if (type.startsWith("image/")) {
+    if (
+      type.startsWith(
+        "image/"
+      )
+    ) {
       return "image";
     }
 
-    if (type.startsWith("video/")) {
+    if (
+      type.startsWith(
+        "video/"
+      )
+    ) {
       return "video";
     }
 
-    if (type.startsWith("audio/")) {
+    if (
+      type.startsWith(
+        "audio/"
+      )
+    ) {
       return "audio";
     }
 
@@ -525,7 +888,8 @@
       type.includes("document") ||
       type.includes("word") ||
       type.includes("text") ||
-      type.includes("spreadsheet")
+      type.includes("spreadsheet") ||
+      type.includes("excel")
     ) {
       return "document";
     }
@@ -533,121 +897,247 @@
     return "file";
   }
 
-  function cleanFileName(name) {
-    return String(name)
-      .replace(/[^a-zA-Z0-9._-]/g, "_")
-      .slice(0, 150);
-  }
+  /* =========================================================
+     REAL FILE UPLOAD
+     ========================================================= */
 
-  async function uploadAttachment(file) {
-    if (
-      !file ||
-      !state.user ||
-      !state.chat
-    ) {
+  async function uploadAttachment(
+    file
+  ) {
+    if (!file) {
       return;
     }
 
-    const maxSize =
-      100 * 1024 * 1024;
-
-    if (file.size > maxSize) {
+    if (!state.user) {
       toast(
-        "File must be smaller than 100 MB"
+        "You are not logged in."
       );
       return;
     }
 
-    const type =
-      getAttachmentType(file);
+    if (!state.chat) {
+      toast(
+        "Open a chat first."
+      );
+      return;
+    }
 
-    toast("Uploading...");
+    /* -------------------------------------------------------
+       Check active Supabase session
+       ------------------------------------------------------- */
+
+    const {
+      data: sessionData,
+      error: sessionError
+    } = await db.auth.getSession();
+
+    if (sessionError) {
+      alert(
+        "Leo Chat session error:\n\n" +
+        sessionError.message
+      );
+      return;
+    }
+
+    if (
+      !sessionData?.session
+        ?.access_token
+    ) {
+      alert(
+        "Leo Chat:\n\nYour session has expired. Please log in again."
+      );
+      return;
+    }
+
+    /* -------------------------------------------------------
+       Bucket limit is 50 MB
+       ------------------------------------------------------- */
+
+    const MAX_FILE_SIZE =
+      50 * 1024 * 1024;
+
+    if (
+      file.size >
+      MAX_FILE_SIZE
+    ) {
+      alert(
+        "Leo Chat:\n\nThis file is larger than the 50 MB limit."
+      );
+      return;
+    }
+
+    const attachmentType =
+      getAttachmentType(
+        file
+      );
+
+    const safeName =
+      cleanFileName(
+        file.name
+      );
+
+    const uniqueId =
+      randomId();
+
+    /*
+      Storage path:
+
+      USER_ID /
+      UNIQUE_ID /
+      FILE_NAME
+    */
+
+    const storagePath =
+      `${state.user.id}/${uniqueId}/${safeName}`;
+
+    toast(
+      "Uploading " +
+        file.name +
+        "..."
+    );
 
     try {
-      /* -----------------------------------------------------
-         1. Create the message first.
-         ----------------------------------------------------- */
+      /* =====================================================
+         1. UPLOAD REAL FILE TO SUPABASE STORAGE
+         ===================================================== */
 
-      const { data: message, error: messageError } =
-        await db
-          .from("messages")
-          .insert({
-            sender_id: state.user.id,
-            receiver_id: state.chat.id,
-            message:
-              type === "image"
-                ? "📷 Photo"
-                : type === "video"
-                ? "🎥 Video"
-                : type === "audio"
-                ? "🎵 Audio"
-                : "📎 File"
-          })
-          .select()
-          .single();
-
-      if (messageError) {
-        throw messageError;
-      }
-
-      /* -----------------------------------------------------
-         2. Create private storage path.
-
-         USER_ID / MESSAGE_ID / FILE_NAME
-         ----------------------------------------------------- */
-
-      const safeName =
-        cleanFileName(
-          file.name ||
-            `leo-file-${Date.now()}`
-        );
-
-      const path =
-        `${state.user.id}/${message.id}/${Date.now()}-${safeName}`;
-
-      /* -----------------------------------------------------
-         3. Upload to Supabase Storage.
-         ----------------------------------------------------- */
+      console.log(
+        "LEO: Starting upload",
+        {
+          bucket:
+            MEDIA_BUCKET,
+          path:
+            storagePath,
+          name:
+            file.name,
+          type:
+            file.type,
+          size:
+            file.size
+        }
+      );
 
       const {
+        data: uploadData,
         error: uploadError
       } = await db.storage
-        .from("chat-media")
+        .from(
+          MEDIA_BUCKET
+        )
         .upload(
-          path,
+          storagePath,
           file,
           {
             cacheControl:
               "3600",
-            upsert: false,
+
+            upsert:
+              false,
+
             contentType:
               file.type ||
               "application/octet-stream"
           }
         );
 
+      console.log(
+        "LEO: Upload result",
+        uploadData,
+        uploadError
+      );
+
       if (uploadError) {
-        /* Remove empty message if upload fails. */
-
-        await db
-          .from("messages")
-          .delete()
-          .eq(
-            "id",
-            message.id
-          );
-
-        throw uploadError;
+        throw new Error(
+          "Storage upload failed: " +
+          uploadError.message
+        );
       }
 
-      /* -----------------------------------------------------
-         4. Save attachment metadata.
-         ----------------------------------------------------- */
+      /* =====================================================
+         2. CREATE MESSAGE
+         ===================================================== */
+
+      let messageLabel =
+        "📎 File";
+
+      if (
+        attachmentType ===
+        "image"
+      ) {
+        messageLabel =
+          "📷 Photo";
+      }
+
+      if (
+        attachmentType ===
+        "video"
+      ) {
+        messageLabel =
+          "🎥 Video";
+      }
+
+      if (
+        attachmentType ===
+        "audio"
+      ) {
+        messageLabel =
+          "🎵 Audio";
+      }
 
       const {
+        data: message,
+        error: messageError
+      } = await db
+        .from("messages")
+        .insert({
+          sender_id:
+            state.user.id,
+
+          receiver_id:
+            state.chat.id,
+
+          message:
+            messageLabel
+        })
+        .select()
+        .single();
+
+      if (messageError) {
+        /*
+          If message creation fails, remove the
+          uploaded file.
+        */
+
+        await db.storage
+          .from(
+            MEDIA_BUCKET
+          )
+          .remove([
+            storagePath
+          ]);
+
+        throw new Error(
+          "Message creation failed: " +
+          messageError.message
+        );
+      }
+
+      console.log(
+        "LEO: Message created",
+        message
+      );
+
+      /* =====================================================
+         3. SAVE ATTACHMENT RECORD
+         ===================================================== */
+
+      const {
+        data: attachment,
         error: attachmentError
       } = await db
-        .from("message_attachments")
+        .from(
+          "message_attachments"
+        )
         .insert({
           message_id:
             message.id,
@@ -659,7 +1149,7 @@
             file.name,
 
           file_path:
-            path,
+            storagePath,
 
           mime_type:
             file.type ||
@@ -669,71 +1159,159 @@
             file.size,
 
           attachment_type:
-            type
-        });
+            attachmentType
+        })
+        .select()
+        .single();
 
       if (attachmentError) {
-        /* Try to clean up uploaded file. */
+        /*
+          Remove Storage file if metadata
+          creation failed.
+        */
 
         await db.storage
-          .from("chat-media")
-          .remove([path]);
+          .from(
+            MEDIA_BUCKET
+          )
+          .remove([
+            storagePath
+          ]);
 
-        await db
-          .from("messages")
-          .delete()
-          .eq(
-            "id",
-            message.id
-          );
-
-        throw attachmentError;
+        throw new Error(
+          "Attachment record failed: " +
+          attachmentError.message
+        );
       }
 
-      toast("Attachment sent");
+      console.log(
+        "LEO: Attachment saved",
+        attachment
+      );
+
+      /*
+        Clear any old cached URL.
+      */
+
+      delete state.attachmentUrls[
+        storagePath
+      ];
+
+      toast(
+        "Attachment sent successfully."
+      );
 
       await getMessages();
 
-      renderChat();
+      await renderChat();
 
     } catch (error) {
-      console.log(
-        "Attachment upload:",
+      console.error(
+        "LEO REAL ATTACHMENT ERROR:",
         error
       );
 
-      toast(
-        error.message ||
-          "Attachment upload failed"
+      /*
+        This popup is intentional.
+        If anything fails, it gives the exact
+        Supabase/browser error instead of hiding it.
+      */
+
+      alert(
+        "Leo Chat attachment error:\n\n" +
+        (
+          error?.message ||
+          String(error)
+        )
       );
     }
   }
 
   /* =========================================================
-     GET PRIVATE STORAGE URL
+     SIGNED URL
      ========================================================= */
 
-  async function getAttachmentUrl(path) {
+  async function getAttachmentUrl(
+    path
+  ) {
+    if (!path) {
+      return null;
+    }
+
+    const cached =
+      state.attachmentUrls[
+        path
+      ];
+
+    /*
+      Signed URLs are cached for 50 minutes.
+    */
+
+    if (
+      cached &&
+      cached.expiresAt >
+        Date.now()
+    ) {
+      return cached.url;
+    }
+
+    const {
+      data: sessionData,
+      error: sessionError
+    } = await db.auth.getSession();
+
+    if (sessionError) {
+      console.error(
+        "Session error:",
+        sessionError
+      );
+      return null;
+    }
+
+    if (
+      !sessionData?.session
+        ?.access_token
+    ) {
+      return null;
+    }
+
     const {
       data,
       error
     } = await db.storage
-      .from("chat-media")
+      .from(
+        MEDIA_BUCKET
+      )
       .createSignedUrl(
         path,
         3600
       );
 
     if (error) {
-      console.log(
-        "Signed URL:",
-        error.message
+      console.error(
+        "SIGNED URL ERROR:",
+        error
       );
 
       return null;
     }
 
-    return data?.signedUrl || null;
+    const url =
+      data?.signedUrl ||
+      null;
+
+    if (url) {
+      state.attachmentUrls[
+        path
+      ] = {
+        url,
+        expiresAt:
+          Date.now() +
+          50 * 60 * 1000
+      };
+    }
+
+    return url;
   }
 
   /* =========================================================
@@ -741,10 +1319,15 @@
      ========================================================= */
 
   window.openAttachment =
-    async (path, type) => {
+    async (
+      path,
+      type
+    ) => {
       if (!path) return;
 
-      toast("Opening...");
+      toast(
+        "Opening..."
+      );
 
       const url =
         await getAttachmentUrl(
@@ -753,35 +1336,15 @@
 
       if (!url) {
         return toast(
-          "Could not open attachment"
+          "Could not open attachment."
         );
       }
 
-      if (
-        type === "image" ||
-        type === "video" ||
-        type === "audio"
-      ) {
-        window.open(
-          url,
-          "_blank",
-          "noopener"
-        );
-      } else {
-        const a =
-          document.createElement(
-            "a"
-          );
-
-        a.href = url;
-
-        a.target = "_blank";
-
-        a.rel =
-          "noopener noreferrer";
-
-        a.click();
-      }
+      window.open(
+        url,
+        "_blank",
+        "noopener,noreferrer"
+      );
     };
 
   /* =========================================================
@@ -801,17 +1364,54 @@
         attachment.attachment_type
       );
 
+    /* -------------------------------------------------------
+       IMAGE
+       ------------------------------------------------------- */
+
     if (
       attachment.attachment_type ===
       "image"
     ) {
+      if (
+        attachment.signedUrl
+      ) {
+        return `
+          <button
+            class="attachment-image"
+            onclick="
+              openAttachment(
+                decodeURIComponent('${safePath}'),
+                decodeURIComponent('${safeType}')
+              )
+            "
+          >
+            <img
+              src="${esc(
+                attachment.signedUrl
+              )}"
+              alt="Leo Chat photo"
+              style="
+                width:100%;
+                max-width:280px;
+                max-height:360px;
+                object-fit:cover;
+                display:block;
+                border-radius:12px;
+              "
+            >
+          </button>
+        `;
+      }
+
       return `
         <button
           class="attachment-image"
-          onclick="openAttachment(
-            decodeURIComponent('${safePath}'),
-            decodeURIComponent('${safeType}')
-          )"
+          onclick="
+            openAttachment(
+              decodeURIComponent('${safePath}'),
+              decodeURIComponent('${safeType}')
+            )
+          "
         >
           <div class="attachment-loading">
             📷 Loading photo...
@@ -820,6 +1420,10 @@
       `;
     }
 
+    /* -------------------------------------------------------
+       VIDEO
+       ------------------------------------------------------- */
+
     if (
       attachment.attachment_type ===
       "video"
@@ -827,18 +1431,26 @@
       return `
         <button
           class="attachment-file"
-          onclick="openAttachment(
-            decodeURIComponent('${safePath}'),
-            decodeURIComponent('${safeType}')
-          )"
+          onclick="
+            openAttachment(
+              decodeURIComponent('${safePath}'),
+              decodeURIComponent('${safeType}')
+            )
+          "
         >
           🎥
           <span>
-            ${esc(attachment.file_name)}
+            ${esc(
+              attachment.file_name
+            )}
           </span>
         </button>
       `;
     }
+
+    /* -------------------------------------------------------
+       AUDIO
+       ------------------------------------------------------- */
 
     if (
       attachment.attachment_type ===
@@ -847,96 +1459,134 @@
       return `
         <button
           class="attachment-file"
-          onclick="openAttachment(
-            decodeURIComponent('${safePath}'),
-            decodeURIComponent('${safeType}')
-          )"
+          onclick="
+            openAttachment(
+              decodeURIComponent('${safePath}'),
+              decodeURIComponent('${safeType}')
+            )
+          "
         >
           🎵
           <span>
-            ${esc(attachment.file_name)}
+            ${esc(
+              attachment.file_name
+            )}
           </span>
         </button>
       `;
     }
 
+    /* -------------------------------------------------------
+       DOCUMENT / FILE
+       ------------------------------------------------------- */
+
     return `
       <button
         class="attachment-file"
-        onclick="openAttachment(
-          decodeURIComponent('${safePath}'),
-          decodeURIComponent('${safeType}')
-        )"
+        onclick="
+          openAttachment(
+            decodeURIComponent('${safePath}'),
+            decodeURIComponent('${safeType}')
+          )
+        "
       >
         📎
         <span>
-          ${esc(attachment.file_name)}
+          ${esc(
+            attachment.file_name
+          )}
         </span>
       </button>
     `;
   }
 
   /* =========================================================
-     LOAD IMAGE URLS FOR DISPLAY
+     PREPARE ATTACHMENT URLS
      ========================================================= */
 
   async function prepareAttachmentUrls() {
-    for (
-      const messageId in state.attachments
-    ) {
-      const list =
-        state.attachments[
-          messageId
-        ];
+    const all =
+      [];
 
-      for (
-        const attachment of list
-      ) {
-        if (
-          attachment.attachment_type ===
-          "image"
-        ) {
-          const url =
+    Object.keys(
+      state.attachments
+    ).forEach(
+      (messageId) => {
+        const list =
+          state.attachments[
+            messageId
+          ] || [];
+
+        list.forEach(
+          (attachment) => {
+            if (
+              attachment.attachment_type ===
+              "image"
+            ) {
+              all.push(
+                attachment
+              );
+            }
+          }
+        );
+      }
+    );
+
+    await Promise.all(
+      all.map(
+        async (
+          attachment
+        ) => {
+          attachment.signedUrl =
             await getAttachmentUrl(
               attachment.file_path
             );
-
-          attachment.signedUrl =
-            url;
         }
-      }
-    }
+      )
+    );
   }
 
   /* =========================================================
-     POLLING FALLBACK
+     POLLING
      ========================================================= */
 
   function startPolling() {
-    clearInterval(poll);
-
-    poll = setInterval(
-      async () => {
-        if (
-          state.screen ===
-          "chat"
-        ) {
-          await getMessages();
-
-          await updatePresenceActivity();
-
-          renderChat();
-        } else if (
-          state.screen ===
-            "home" ||
-          state.screen ===
-            "search"
-        ) {
-          await loadPresence();
-        }
-      },
-      5000
+    clearInterval(
+      poll
     );
+
+    poll =
+      setInterval(
+        async () => {
+          if (
+            state.screen ===
+            "chat"
+          ) {
+            await getMessages();
+
+            await loadPresence();
+
+            renderChat();
+          }
+
+          if (
+            state.screen ===
+              "home" ||
+            state.screen ===
+              "search"
+          ) {
+            await loadPresence();
+
+            /*
+              Only rerender the home/search screen
+              periodically when needed.
+            */
+
+            render();
+          }
+        },
+        5000
+      );
   }
 
   /* =========================================================
@@ -947,9 +1597,11 @@
     if (!state.user) return;
 
     if (messageChannel) {
-      await db.removeChannel(
-        messageChannel
-      );
+      try {
+        await db.removeChannel(
+          messageChannel
+        );
+      } catch {}
     }
 
     messageChannel =
@@ -961,7 +1613,7 @@
         .on(
           "postgres_changes",
           {
-            event: "*",
+            event: "INSERT",
             schema: "public",
             table: "messages",
             filter:
@@ -974,7 +1626,7 @@
             ) {
               await getMessages();
 
-              renderChat();
+              await renderChat();
             } else {
               addNotification(
                 "New message",
@@ -998,7 +1650,7 @@
             ) {
               await getMessages();
 
-              renderChat();
+              await renderChat();
             }
           }
         )
@@ -1066,18 +1718,20 @@
           .map(
             (x) =>
               `
-              <button
-                class="${
-                  state.screen ===
-                  x[0]
-                    ? "active"
-                    : ""
-                }"
-                onclick="go('${x[0]}')"
-              >
-                ${icon(x[1])}
-                <b>${x[2]}</b>
-              </button>
+                <button
+                  class="${
+                    state.screen ===
+                    x[0]
+                      ? "active"
+                      : ""
+                  }"
+                  onclick="
+                    go('${x[0]}')
+                  "
+                >
+                  ${icon(x[1])}
+                  <b>${x[2]}</b>
+                </button>
               `
           )
           .join("")}
@@ -1085,35 +1739,85 @@
     `;
   }
 
-  window.go = async (
-    screen
-  ) => {
-    state.screen = screen;
+  window.go =
+    async (
+      screen
+    ) => {
+      state.screen =
+        screen;
 
-    await updatePresenceActivity();
+      await updatePresenceActivity();
 
-    render();
-  };
+      render();
+    };
+
+  /* =========================================================
+     OPEN CHAT BY PROFILE ID
+     ========================================================= */
+
+  window.openChatById =
+    async (
+      id
+    ) => {
+      const person =
+        state.profiles.find(
+          (p) =>
+            p.id === id
+        );
+
+      if (!person) {
+        await getProfiles();
+
+        const found =
+          state.profiles.find(
+            (p) =>
+              p.id === id
+          );
+
+        if (!found) {
+          return toast(
+            "User could not be found."
+          );
+        }
+
+        return window.openChat(
+          found
+        );
+      }
+
+      await window.openChat(
+        person
+      );
+    };
 
   /* =========================================================
      OPEN CHAT
      ========================================================= */
 
   window.openChat =
-    async (person) => {
-      state.chat = person;
+    async (
+      person
+    ) => {
+      state.chat =
+        person;
 
-      state.screen = "chat";
+      state.screen =
+        "chat";
 
-      state.messages = [];
+      state.messages =
+        [];
 
-      state.attachments = {};
+      state.attachments =
+        {};
+
+      state.attachmentUrls =
+        {};
 
       await updatePresenceActivity();
 
       await getMessages();
 
-      renderChat();
+      await renderChat();
     };
 
   /* =========================================================
@@ -1126,41 +1830,54 @@
         await markOffline();
       } catch {}
 
-      if (presenceChannel) {
-        try {
-          await presenceChannel.untrack();
-        } catch {}
-
-        await db.removeChannel(
-          presenceChannel
-        );
-
-        presenceChannel = null;
-      }
+      await stopPresence();
 
       if (messageChannel) {
-        await db.removeChannel(
-          messageChannel
-        );
+        try {
+          await db.removeChannel(
+            messageChannel
+          );
+        } catch {}
 
-        messageChannel = null;
+        messageChannel =
+          null;
       }
 
-      clearInterval(poll);
+      clearInterval(
+        poll
+      );
 
-      await db.auth.signOut();
+      clearInterval(
+        presencePoll
+      );
 
-      state.user = null;
+      try {
+        await db.auth.signOut();
+      } catch {}
 
-      state.profile = null;
+      state.user =
+        null;
 
-      state.chat = null;
+      state.profile =
+        null;
 
-      state.messages = [];
+      state.chat =
+        null;
 
-      state.attachments = {};
+      state.messages =
+        [];
 
-      state.screen = "home";
+      state.attachments =
+        {};
+
+      state.attachmentUrls =
+        {};
+
+      state.presence =
+        {};
+
+      state.screen =
+        "home";
 
       render();
     };
@@ -1173,63 +1890,71 @@
     app.innerHTML =
       layout(
         `
-        <div
-          class="screen center"
-          style="
-            justify-content:center;
-            padding:28px
-          "
-        >
-
-          <img
-            class="logo"
-            src="./logo.svg"
+          <div
+            class="screen center"
+            style="
+              justify-content:center;
+              padding:28px
+            "
           >
 
-          <h1>Leo Chat</h1>
+            <img
+              class="logo"
+              src="./logo.svg"
+            >
 
-          <p class="muted">
-            Chat. Connect. Roar.
-          </p>
+            <h1>
+              Leo Chat
+            </h1>
 
-          <input
-            id="email"
-            class="input"
-            placeholder="Email"
-            type="email"
-            autocomplete="email"
-          >
+            <p class="muted">
+              Chat. Connect. Roar.
+            </p>
 
-          <input
-            id="pass"
-            class="input"
-            placeholder="Password"
-            type="password"
-            autocomplete="current-password"
-          >
+            <input
+              id="email"
+              class="input"
+              placeholder="Email"
+              type="email"
+              autocomplete="email"
+            >
 
-          <button
-            class="btn"
-            onclick="auth('signin')"
-          >
-            Sign in
-          </button>
+            <input
+              id="pass"
+              class="input"
+              placeholder="Password"
+              type="password"
+              autocomplete="current-password"
+            >
 
-          <button
-            class="btn secondary"
-            onclick="auth('signup')"
-          >
-            Create account
-          </button>
+            <button
+              class="btn"
+              onclick="
+                auth('signin')
+              "
+            >
+              Sign in
+            </button>
 
-        </div>
+            <button
+              class="btn secondary"
+              onclick="
+                auth('signup')
+              "
+            >
+              Create account
+            </button>
+
+          </div>
         `,
         false
       );
   }
 
   window.auth =
-    async (mode) => {
+    async (
+      mode
+    ) => {
       const email =
         document
           .getElementById(
@@ -1250,7 +1975,7 @@
         !password
       ) {
         return toast(
-          "Enter email and password"
+          "Enter email and password."
         );
       }
 
@@ -1261,40 +1986,54 @@
           : "Signing in..."
       );
 
-      const r =
-        mode ===
-        "signup"
-          ? await db.auth.signUp(
-              {
-                email,
-                password
-              }
-            )
-          : await db.auth.signInWithPassword(
-              {
-                email,
-                password
-              }
-            );
+      try {
+        const r =
+          mode ===
+          "signup"
+            ? await db.auth.signUp(
+                {
+                  email,
+                  password
+                }
+              )
+            : await db.auth.signInWithPassword(
+                {
+                  email,
+                  password
+                }
+              );
 
-      if (r.error) {
-        return toast(
-          r.error.message
+        if (r.error) {
+          return toast(
+            r.error.message
+          );
+        }
+
+        state.user =
+          r.data.user;
+
+        if (!state.user) {
+          return toast(
+            "Account created. Check your email if confirmation is required."
+          );
+        }
+
+        await loadProfile();
+
+        await startPresence();
+
+        await startMessageRealtime();
+
+        startPolling();
+
+        render();
+
+      } catch (error) {
+        toast(
+          error.message ||
+            "Authentication failed."
         );
       }
-
-      state.user =
-        r.data.user;
-
-      await loadProfile();
-
-      await startPresence();
-
-      await startMessageRealtime();
-
-      startPolling();
-
-      render();
     };
 
   /* =========================================================
@@ -1305,45 +2044,47 @@
     app.innerHTML =
       layout(
         `
-        <div
-          class="screen center"
-          style="
-            justify-content:center;
-            padding:25px
-          "
-        >
-
-          <img
-            class="logo"
-            src="./logo.svg"
+          <div
+            class="screen center"
+            style="
+              justify-content:center;
+              padding:25px
+            "
           >
 
-          <h2>
-            Set up your Leo profile
-          </h2>
+            <img
+              class="logo"
+              src="./logo.svg"
+            >
 
-          <input
-            id="uname"
-            class="input"
-            placeholder="Username"
-            autocomplete="username"
-          >
+            <h2>
+              Set up your Leo profile
+            </h2>
 
-          <input
-            id="dname"
-            class="input"
-            placeholder="Display name"
-            autocomplete="name"
-          >
+            <input
+              id="uname"
+              class="input"
+              placeholder="Username"
+              autocomplete="username"
+            >
 
-          <button
-            class="btn"
-            onclick="saveProfile()"
-          >
-            Enter Leo Chat
-          </button>
+            <input
+              id="dname"
+              class="input"
+              placeholder="Display name"
+              autocomplete="name"
+            >
 
-        </div>
+            <button
+              class="btn"
+              onclick="
+                saveProfile()
+              "
+            >
+              Enter Leo Chat
+            </button>
+
+          </div>
         `,
         false
       );
@@ -1373,7 +2114,21 @@
         !display_name
       ) {
         return toast(
-          "Complete your profile"
+          "Complete your profile."
+        );
+      }
+
+      const cleanUsername =
+        username.replace(
+          /[^a-z0-9_]/g,
+          ""
+        );
+
+      if (
+        !cleanUsername
+      ) {
+        return toast(
+          "Username must contain letters, numbers or underscores."
         );
       }
 
@@ -1383,10 +2138,16 @@
       } = await db
         .from("profiles")
         .insert({
-          id: state.user.id,
-          username,
+          id:
+            state.user.id,
+
+          username:
+            cleanUsername,
+
           display_name,
-          avatar: "🦁"
+
+          avatar:
+            "🦁"
         })
         .select()
         .single();
@@ -1410,9 +2171,17 @@
      ========================================================= */
 
   async function renderHome() {
-    await getProfiles();
+    await Promise.all([
+      getProfiles(),
+      loadPresence()
+    ]);
 
-    await loadPresence();
+    if (
+      state.screen !==
+      "home"
+    ) {
+      return;
+    }
 
     const people =
       state.profiles.filter(
@@ -1424,157 +2193,171 @@
     app.innerHTML =
       layout(
         `
-        <div class="screen">
+          <div class="screen">
 
-          <div class="top">
+            <div class="top">
 
-            <div class="brand">
+              <div class="brand">
 
-              <img
-                src="./logo.svg"
+                <img
+                  src="./logo.svg"
+                >
+
+                Leo Chat
+
+              </div>
+
+              <button
+                class="iconbtn"
+                onclick="
+                  openNotifications()
+                "
               >
-
-              Leo Chat
+                🔔
+              </button>
 
             </div>
 
-            <button
-              class="iconbtn"
-              onclick="
-                state.screen='notifications';
-                render()
-              "
-            >
-              🔔
-            </button>
+            <div class="content">
 
-          </div>
+              <div class="card">
 
-          <div class="content">
+                <div class="row">
 
-            <div class="card">
-
-              <div class="row">
-
-                <div class="avatar">
-                  🦁
-                </div>
-
-                <div class="grow">
-
-                  <div class="name">
+                  <div class="avatar">
                     ${esc(
                       state.profile
-                        .display_name
+                        ?.avatar ||
+                        "🦁"
                     )}
                   </div>
 
-                  <div class="sub">
-                    @${esc(
-                      state.profile
-                        .username
-                    )}
-                  </div>
+                  <div class="grow">
 
-                  <div class="online-status">
-                    <span class="status-dot online"></span>
-                    Online
+                    <div class="name">
+                      ${esc(
+                        state.profile
+                          ?.display_name ||
+                          "Leo User"
+                      )}
+                    </div>
+
+                    <div class="sub">
+                      @${esc(
+                        state.profile
+                          ?.username ||
+                          ""
+                      )}
+                    </div>
+
+                    <div class="online-status">
+
+                      <span
+                        class="status-dot online"
+                      ></span>
+
+                      Online
+
+                    </div>
+
                   </div>
 
                 </div>
 
               </div>
 
+              <h3>
+                People
+              </h3>
+
+              ${
+                people.length
+                  ? people
+                      .map(
+                        (
+                          p
+                        ) => {
+                          const online =
+                            isOnline(
+                              p.id
+                            );
+
+                          return `
+                            <div
+                              class="listitem"
+                              onclick="
+                                openChatById('${esc(
+                                  p.id
+                                )}')
+                              "
+                            >
+
+                              <div class="avatar">
+                                ${esc(
+                                  p.avatar ||
+                                    "🦁"
+                                )}
+                              </div>
+
+                              <div class="grow">
+
+                                <div class="name">
+                                  ${esc(
+                                    p.display_name
+                                  )}
+                                </div>
+
+                                <div class="sub">
+                                  @${esc(
+                                    p.username
+                                  )}
+                                </div>
+
+                                <div class="online-status">
+
+                                  <span
+                                    class="status-dot ${
+                                      online
+                                        ? "online"
+                                        : "offline"
+                                    }"
+                                  ></span>
+
+                                  ${
+                                    online
+                                      ? "Online"
+                                      : formatLastSeen(
+                                          state
+                                            .presence[
+                                            p.id
+                                          ]
+                                            ?.last_seen_at
+                                        )
+                                  }
+
+                                </div>
+
+                              </div>
+
+                              <div class="gold">
+                                ›
+                              </div>
+
+                            </div>
+                          `;
+                        }
+                      )
+                      .join("")
+                  : `
+                      <div class="empty">
+                        No other Leo users yet.
+                      </div>
+                    `
+              }
+
             </div>
 
-            <h3>
-              People
-            </h3>
-
-            ${
-              people.length
-                ? people
-                    .map(
-                      (p) => {
-                        const online =
-                          isOnline(
-                            p.id
-                          );
-
-                        return `
-                          <div
-                            class="listitem"
-                            onclick='openChat(${JSON.stringify(
-                              p
-                            )})'
-                          >
-
-                            <div class="avatar">
-                              ${esc(
-                                p.avatar ||
-                                  "🦁"
-                              )}
-                            </div>
-
-                            <div class="grow">
-
-                              <div class="name">
-                                ${esc(
-                                  p.display_name
-                                )}
-                              </div>
-
-                              <div class="sub">
-                                @${esc(
-                                  p.username
-                                )}
-                              </div>
-
-                              <div class="online-status">
-
-                                <span
-                                  class="status-dot ${
-                                    online
-                                      ? "online"
-                                      : "offline"
-                                  }"
-                                ></span>
-
-                                ${
-                                  online
-                                    ? "Online"
-                                    : formatLastSeen(
-                                        state
-                                          .presence[
-                                          p.id
-                                        ]
-                                          ?.last_seen_at
-                                      )
-                                }
-
-                              </div>
-
-                            </div>
-
-                            <div class="gold">
-                              ›
-                            </div>
-
-                          </div>
-                        `;
-                      }
-                    )
-                    .join("")
-                : `
-                  <div class="empty">
-                    No other Leo users yet.
-                  </div>
-                `
-            }
-
           </div>
-
-        </div>
         `
       );
   }
@@ -1587,33 +2370,35 @@
     app.innerHTML =
       layout(
         `
-        <div class="screen">
+          <div class="screen">
 
-          <div class="top">
+            <div class="top">
 
-            <div class="brand">
-              ${icon("⌕")}
-              Search
+              <div class="brand">
+                ${icon("⌕")}
+                Search
+              </div>
+
+            </div>
+
+            <div class="content">
+
+              <input
+                id="q"
+                class="input search"
+                placeholder="Search people..."
+                oninput="
+                  filterPeople()
+                "
+              >
+
+              <div
+                id="results"
+              ></div>
+
             </div>
 
           </div>
-
-          <div class="content">
-
-            <input
-              id="q"
-              class="input search"
-              placeholder="Search people..."
-              oninput="filterPeople()"
-            >
-
-            <div
-              id="results"
-            ></div>
-
-          </div>
-
-        </div>
         `
       );
 
@@ -1621,9 +2406,10 @@
   }
 
   async function filterPeople() {
-    await getProfiles();
-
-    await loadPresence();
+    await Promise.all([
+      getProfiles(),
+      loadPresence()
+    ]);
 
     const q =
       (
@@ -1664,9 +2450,11 @@
             return `
               <div
                 class="listitem"
-                onclick='openChat(${JSON.stringify(
-                  p
-                )})'
+                onclick="
+                  openChatById('${esc(
+                    p.id
+                  )}')
+                "
               >
 
                 <div class="avatar">
@@ -1736,15 +2524,17 @@
     const p =
       state.chat;
 
-    const msgs =
-      state.messages;
-
     if (!p) {
       state.screen =
         "home";
 
       return renderHome();
     }
+
+    await prepareAttachmentUrls();
+
+    const msgs =
+      state.messages;
 
     const online =
       isOnline(
@@ -1754,161 +2544,190 @@
     app.innerHTML =
       layout(
         `
-        <div class="chat">
+          <div class="chat">
 
-          <div class="chathead">
+            <div class="chathead">
 
-            <button
-              class="back"
-              onclick="leaveChat()"
-            >
-              ‹
-            </button>
+              <button
+                class="back"
+                onclick="
+                  leaveChat()
+                "
+              >
+                ‹
+              </button>
 
-            <div class="avatar">
-              ${esc(
-                p.avatar ||
-                  "🦁"
-              )}
-            </div>
-
-            <div class="grow">
-
-              <div class="name">
+              <div class="avatar">
                 ${esc(
-                  p.display_name
+                  p.avatar ||
+                    "🦁"
                 )}
               </div>
 
-              <div class="sub">
+              <div class="grow">
 
-                <span
-                  class="status-dot ${
+                <div class="name">
+                  ${esc(
+                    p.display_name
+                  )}
+                </div>
+
+                <div class="sub">
+
+                  <span
+                    class="status-dot ${
+                      online
+                        ? "online"
+                        : "offline"
+                    }"
+                  ></span>
+
+                  ${
                     online
-                      ? "online"
-                      : "offline"
-                  }"
-                ></span>
+                      ? "Online"
+                      : formatLastSeen(
+                          state
+                            .presence[
+                            p.id
+                          ]
+                            ?.last_seen_at
+                        )
+                  }
 
-                ${
-                  online
-                    ? "Online"
-                    : formatLastSeen(
-                        state
-                          .presence[
-                          p.id
-                        ]
-                          ?.last_seen_at
-                      )
-                }
+                </div>
 
               </div>
 
+              <button
+                class="iconbtn"
+                onclick="
+                  callUser('voice')
+                "
+                title="Voice call"
+              >
+                ☎
+              </button>
+
+              <button
+                class="iconbtn"
+                onclick="
+                  callUser('video')
+                "
+                title="Video call"
+              >
+                ▣
+              </button>
+
             </div>
 
-            <button
-              class="iconbtn"
-              onclick="callUser('voice')"
-              title="Voice call"
+            <div
+              class="messages"
+              id="messages"
             >
-              ☎
-            </button>
 
-            <button
-              class="iconbtn"
-              onclick="callUser('video')"
-              title="Video call"
-            >
-              ▣
-            </button>
+              ${
+                msgs.length
+                  ? msgs
+                      .map(
+                        (m) =>
+                          renderMessage(
+                            m
+                          )
+                      )
+                      .join("")
+                  : `
+                      <div class="empty">
+                        Start the conversation 🦁
+                      </div>
+                    `
+              }
 
-          </div>
+            </div>
 
-          <div
-            class="messages"
-            id="messages"
-          >
+            <div class="composer">
 
-            ${
-              msgs.length
-                ? msgs
-                    .map(
-                      (m) =>
-                        renderMessage(
-                          m
-                        )
+              <button
+                class="iconbtn"
+                onclick="
+                  document
+                    .getElementById(
+                      'attachmentInput'
                     )
-                    .join("")
-                : `
-                  <div class="empty">
-                    Start the conversation 🦁
-                  </div>
-                `
-            }
+                    .click()
+                "
+                title="Attach"
+              >
+                ＋
+              </button>
+
+              <input
+                id="attachmentInput"
+                class="photo-btn"
+                type="file"
+                accept="
+                  image/*,
+                  video/*,
+                  audio/*,
+                  .pdf,
+                  .doc,
+                  .docx,
+                  .xls,
+                  .xlsx,
+                  .txt,
+                  .zip
+                "
+                multiple
+                onchange="
+                  handleAttachments(event)
+                "
+              >
+
+              <input
+                id="msg"
+                class="input"
+                placeholder="Message..."
+                autocomplete="off"
+                onkeydown="
+                  if(
+                    event.key === 'Enter' &&
+                    !event.shiftKey
+                  ){
+                    event.preventDefault();
+                    sendMsg();
+                  }
+                "
+              >
+
+              <button
+                class="send"
+                onclick="
+                  sendMsg()
+                "
+              >
+                ➤
+              </button>
+
+            </div>
 
           </div>
-
-          <div class="composer">
-
-            <button
-              class="iconbtn"
-              onclick="document.getElementById('attachmentInput').click()"
-              title="Attach"
-            >
-              ＋
-            </button>
-
-            <input
-              id="attachmentInput"
-              class="photo-btn"
-              type="file"
-              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
-              multiple
-              onchange="handleAttachments(event)"
-            >
-
-            <input
-              id="msg"
-              class="input"
-              placeholder="Message..."
-              autocomplete="off"
-              onkeydown="
-                if(event.key==='Enter' && !event.shiftKey){
-                  event.preventDefault();
-                  sendMsg();
-                }
-              "
-            >
-
-            <button
-              class="send"
-              onclick="sendMsg()"
-            >
-              ➤
-            </button>
-
-          </div>
-
-        </div>
         `,
         false
       );
 
-    await prepareAttachmentUrls();
+    setTimeout(
+      () => {
+        const m =
+          document.getElementById(
+            "messages"
+          );
 
-    renderAttachmentImages();
-
-    setTimeout(() => {
-      const m =
-        document.getElementById(
-          "messages"
-        );
-
-      if (m) {
-        m.scrollTop =
-          m.scrollHeight;
-      }
-    }, 30);
+        if (m) {
+          m.scrollTop =
+            m.scrollHeight;
+        }
+      },
+      30
+    );
   }
 
   function renderMessage(
@@ -1935,37 +2754,38 @@
         ${
           message.message
             ? `
-              <div>
-                ${esc(
-                  message.message
-                )}
-              </div>
-            `
+                <div>
+                  ${esc(
+                    message.message
+                  )}
+                </div>
+              `
             : ""
         }
 
         ${
           list.length
             ? `
-              <div
-                class="attachment-list"
-              >
-                ${list
-                  .map(
-                    (
-                      attachment
-                    ) =>
-                      renderAttachment(
+                <div
+                  class="attachment-list"
+                >
+                  ${list
+                    .map(
+                      (
                         attachment
-                      )
-                  )
-                  .join("")}
-              </div>
-            `
+                      ) =>
+                        renderAttachment(
+                          attachment
+                        )
+                    )
+                    .join("")}
+                </div>
+              `
             : ""
         }
 
         <div class="message-meta">
+
           ${formatTime(
             message.created_at
           )}
@@ -1975,78 +2795,11 @@
               ? " ✓✓"
               : ""
           }
+
         </div>
 
       </div>
     `;
-  }
-
-  /* =========================================================
-     DISPLAY REAL IMAGE PREVIEWS
-     ========================================================= */
-
-  function renderAttachmentImages() {
-    const images =
-      document.querySelectorAll(
-        ".attachment-image"
-      );
-
-    images.forEach(
-      (button) => {
-        const encoded =
-          button.dataset?.path;
-
-        if (encoded) return;
-      }
-    );
-
-    const attachments =
-      document.querySelectorAll(
-        ".attachment-image"
-      );
-
-    attachments.forEach(
-      (element) => {
-        const onclick =
-          element.getAttribute(
-            "onclick"
-          );
-
-        if (!onclick) return;
-
-        const match =
-          onclick.match(
-            /decodeURIComponent\('([^']+)'\)/
-          );
-
-        if (!match) return;
-
-        const path =
-          decodeURIComponent(
-            match[1]
-          );
-
-        getAttachmentUrl(
-          path
-        ).then(
-          (url) => {
-            if (!url) return;
-
-            element.innerHTML = `
-              <img
-                src="${esc(url)}"
-                alt="Leo Chat photo"
-                style="
-                  max-width:100%;
-                  display:block;
-                  border-radius:12px;
-                "
-              >
-            `;
-          }
-        );
-      }
-    );
   }
 
   /* =========================================================
@@ -2063,7 +2816,9 @@
       const text =
         el?.value.trim();
 
-      if (!text) return;
+      if (!text) {
+        return;
+      }
 
       if (
         !state.user ||
@@ -2100,22 +2855,31 @@
 
       await getMessages();
 
-      renderChat();
+      await renderChat();
 
       await updatePresenceActivity();
     };
 
   /* =========================================================
-     REAL ATTACHMENTS
+     ATTACHMENT PICKER
      ========================================================= */
 
   window.handleAttachments =
-    async (event) => {
+    async (
+      event
+    ) => {
       const files =
         Array.from(
-          event.target
-            ?.files || []
+          event.target?.files ||
+            []
         );
+
+      /*
+        Clear input immediately.
+      */
+
+      event.target.value =
+        "";
 
       if (!files.length) {
         return;
@@ -2128,13 +2892,6 @@
           file
         );
       }
-
-      event.target.value =
-        "";
-
-      await getMessages();
-
-      renderChat();
     };
 
   /* =========================================================
@@ -2142,7 +2899,9 @@
      ========================================================= */
 
   window.callUser =
-    (kind) => {
+    (
+      kind
+    ) => {
       toast(
         `${
           kind === "video"
@@ -2167,6 +2926,9 @@
       state.attachments =
         {};
 
+      state.attachmentUrls =
+        {};
+
       state.screen =
         "home";
 
@@ -2183,101 +2945,105 @@
     app.innerHTML =
       layout(
         `
-        <div class="screen">
+          <div class="screen">
 
-          <div class="top">
+            <div class="top">
 
-            <div class="brand">
-              ${icon("✦")}
-              Moments
+              <div class="brand">
+                ${icon("✦")}
+                Moments
+              </div>
+
+              <button
+                class="iconbtn"
+                onclick="
+                  document
+                    .getElementById(
+                      'momentFile'
+                    )
+                    .click()
+                "
+              >
+                ＋
+              </button>
+
+              <input
+                id="momentFile"
+                class="photo-btn"
+                type="file"
+                accept="image/*"
+                onchange="
+                  addMoment(event)
+                "
+              >
+
             </div>
 
-            <button
-              class="iconbtn"
-              onclick="
-                document
-                  .getElementById(
-                    'momentFile'
-                  )
-                  .click()
-              "
-            >
-              ＋
-            </button>
+            <div class="content">
 
-            <input
-              id="momentFile"
-              class="photo-btn"
-              type="file"
-              accept="image/*"
-              onchange="addMoment(event)"
-            >
+              ${
+                state.moments.length
+                  ? state.moments
+                      .map(
+                        (m) =>
+                          `
+                            <div class="moment">
 
-          </div>
+                              <img
+                                src="${esc(
+                                  m.src
+                                )}"
+                              >
 
-          <div class="content">
+                              <p>
 
-            ${
-              state.moments.length
-                ? state.moments
-                    .map(
-                      (m) =>
-                        `
-                        <div class="moment">
+                                ${esc(
+                                  m.text ||
+                                    "Leo Moment"
+                                )}
 
-                          <img
-                            src="${esc(
-                              m.src
-                            )}"
-                          >
+                                <br>
 
-                          <p>
+                                <span class="muted">
+                                  ${new Date(
+                                    m.at
+                                  ).toLocaleString()}
+                                </span>
 
-                            ${esc(
-                              m.text ||
-                                "Leo Moment"
-                            )}
+                              </p>
 
-                            <br>
+                            </div>
+                          `
+                      )
+                      .join("")
+                  : `
+                      <div class="empty">
 
-                            <span class="muted">
-                              ${new Date(
-                                m.at
-                              ).toLocaleString()}
-                            </span>
-
-                          </p>
-
+                        <div
+                          style="
+                            font-size:50px
+                          "
+                        >
+                          ✦
                         </div>
-                        `
-                    )
-                    .join("")
-                : `
-                  <div class="empty">
 
-                    <div
-                      style="
-                        font-size:50px
-                      "
-                    >
-                      ✦
-                    </div>
+                        No moments yet.
 
-                    No moments yet.
+                      </div>
+                    `
+              }
 
-                  </div>
-                `
-            }
+            </div>
 
           </div>
-
-        </div>
         `
       );
   }
 
   window.addMoment =
-    (e) => {
+    (
+      e
+    ) => {
       const f =
         e.target?.files?.[0];
 
@@ -2313,6 +3079,9 @@
       };
 
       r.readAsDataURL(f);
+
+      e.target.value =
+        "";
     };
 
   /* =========================================================
@@ -2323,58 +3092,58 @@
     app.innerHTML =
       layout(
         `
-        <div class="screen">
+          <div class="screen">
 
-          <div class="top">
+            <div class="top">
 
-            <div class="brand">
-              ${icon("☎")}
-              Calls
-            </div>
-
-          </div>
-
-          <div class="content">
-
-            <div
-              class="card center"
-            >
-
-              <img
-                class="logo"
-                style="
-                  width:80px;
-                  height:80px
-                "
-                src="./logo.svg"
-              >
-
-              <h2>
-                Leo Calls
-              </h2>
-
-              <p class="muted">
-                Voice and video calls
-                will use WebRTC for
-                live audio and video.
-              </p>
-
-              <button
-                class="btn"
-                onclick="
-                  toast(
-                    'Choose a person from Chats to call'
-                  )
-                "
-              >
-                Start a call
-              </button>
+              <div class="brand">
+                ${icon("☎")}
+                Calls
+              </div>
 
             </div>
 
-          </div>
+            <div class="content">
 
-        </div>
+              <div
+                class="card center"
+              >
+
+                <img
+                  class="logo"
+                  style="
+                    width:80px;
+                    height:80px
+                  "
+                  src="./logo.svg"
+                >
+
+                <h2>
+                  Leo Calls
+                </h2>
+
+                <p class="muted">
+                  Voice and video calls
+                  will use WebRTC for
+                  live audio and video.
+                </p>
+
+                <button
+                  class="btn"
+                  onclick="
+                    toast(
+                      'Choose a person from Chats to call'
+                    )
+                  "
+                >
+                  Start a call
+                </button>
+
+              </div>
+
+            </div>
+
+          </div>
         `
       );
   }
@@ -2387,96 +3156,103 @@
     app.innerHTML =
       layout(
         `
-        <div class="screen">
+          <div class="screen">
 
-          <div class="top">
+            <div class="top">
 
-            <div class="brand">
-              ${icon("⚙")}
-              Settings
+              <div class="brand">
+                ${icon("⚙")}
+                Settings
+              </div>
+
             </div>
 
-          </div>
+            <div class="content">
 
-          <div class="content">
+              <div class="card">
 
-            <div class="card">
+                <h3>
+                  Profile
+                </h3>
 
-              <h3>
-                Profile
-              </h3>
+                <div class="row">
 
-              <div class="row">
-
-                <div class="avatar">
-                  🦁
-                </div>
-
-                <div class="grow">
-
-                  <div class="name">
+                  <div class="avatar">
                     ${esc(
                       state.profile
-                        .display_name
+                        ?.avatar ||
+                        "🦁"
                     )}
                   </div>
 
-                  <div class="sub">
-                    @${esc(
-                      state.profile
-                        .username
-                    )}
+                  <div class="grow">
+
+                    <div class="name">
+                      ${esc(
+                        state.profile
+                          ?.display_name ||
+                          ""
+                      )}
+                    </div>
+
+                    <div class="sub">
+                      @${esc(
+                        state.profile
+                          ?.username ||
+                          ""
+                      )}
+                    </div>
+
                   </div>
 
                 </div>
 
               </div>
 
+              <div class="card">
+
+                <h3>
+                  Notifications
+                </h3>
+
+                ${settingRow(
+                  "messages",
+                  "Messages"
+                )}
+
+                ${settingRow(
+                  "calls",
+                  "Calls"
+                )}
+
+                ${settingRow(
+                  "moments",
+                  "Moments"
+                )}
+
+              </div>
+
+              <button
+                class="btn secondary"
+                onclick="
+                  openNotifications()
+                "
+              >
+                🔔 Notifications
+              </button>
+
+              <button
+                class="btn secondary"
+                onclick="
+                  logout()
+                "
+              >
+                Log out
+              </button>
+
             </div>
-
-            <div class="card">
-
-              <h3>
-                Notifications
-              </h3>
-
-              ${settingRow(
-                "messages",
-                "Messages"
-              )}
-
-              ${settingRow(
-                "calls",
-                "Calls"
-              )}
-
-              ${settingRow(
-                "moments",
-                "Moments"
-              )}
-
-            </div>
-
-            <button
-              class="btn secondary"
-              onclick="
-                state.screen='notifications';
-                render()
-              "
-            >
-              🔔 Notifications
-            </button>
-
-            <button
-              class="btn secondary"
-              onclick="logout()"
-            >
-              Log out
-            </button>
 
           </div>
-
-        </div>
         `
       );
   }
@@ -2519,7 +3295,10 @@
   }
 
   window.toggleSetting =
-    (key, value) => {
+    (
+      key,
+      value
+    ) => {
       state.settings[key] =
         value;
 
@@ -2540,7 +3319,8 @@
     body
   ) {
     if (
-      !state.settings.messages
+      !state.settings
+        .messages
     ) {
       return;
     }
@@ -2575,77 +3355,88 @@
     }
   }
 
+  window.openNotifications =
+    () => {
+      state.screen =
+        "notifications";
+
+      render();
+    };
+
   function renderNotifications() {
     app.innerHTML =
       layout(
         `
-        <div class="screen">
+          <div class="screen">
 
-          <div class="top">
+            <div class="top">
 
-            <div class="brand">
+              <div class="brand">
 
-              <button
-                class="back"
-                onclick="
-                  go('settings')
-                "
-              >
-                ‹
-              </button>
+                <button
+                  class="back"
+                  onclick="
+                    go('settings')
+                  "
+                >
+                  ‹
+                </button>
 
-              ${icon("🔔")}
-              Notifications
+                ${icon("🔔")}
+
+                Notifications
+
+              </div>
+
+            </div>
+
+            <div class="content">
+
+              ${
+                state.notifications
+                  .length
+                  ? state.notifications
+                      .map(
+                        (n) =>
+                          `
+                            <div class="card">
+
+                              <div class="name">
+                                ${esc(
+                                  n.title
+                                )}
+                              </div>
+
+                              <div class="sub">
+                                ${esc(
+                                  n.body
+                                )}
+                              </div>
+
+                              <div class="muted">
+                                ${
+                                  n.at
+                                    ? new Date(
+                                        n.at
+                                      ).toLocaleString()
+                                    : ""
+                                }
+                              </div>
+
+                            </div>
+                          `
+                      )
+                      .join("")
+                  : `
+                      <div class="empty">
+                        No notifications yet.
+                      </div>
+                    `
+              }
 
             </div>
 
           </div>
-
-          <div class="content">
-
-            ${
-              state.notifications
-                .length
-                ? state.notifications
-                    .map(
-                      (n) =>
-                        `
-                        <div class="card">
-
-                          <div class="name">
-                            ${esc(
-                              n.title
-                            )}
-                          </div>
-
-                          <div class="sub">
-                            ${esc(
-                              n.body
-                            )}
-                          </div>
-
-                          <div class="muted">
-                            ${n.at
-                              ? new Date(
-                                  n.at
-                                ).toLocaleString()
-                              : ""}
-                          </div>
-
-                        </div>
-                        `
-                    )
-                    .join("")
-                : `
-                  <div class="empty">
-                    No notifications yet.
-                  </div>
-                `
-            }
-
-          </div>
-
-        </div>
         `
       );
   }
@@ -2717,7 +3508,7 @@
   }
 
   /* =========================================================
-     AUTH STATE
+     AUTH STATE LISTENER
      ========================================================= */
 
   function startAuthListener() {
@@ -2754,6 +3545,10 @@
             clearInterval(
               poll
             );
+
+            clearInterval(
+              presencePoll
+            );
           }
 
           render();
@@ -2778,7 +3573,39 @@
         app.innerHTML =
           layout(
             `
-            <div class="screen center">
+              <div class="screen center">
+
+                <img
+                  class="logo"
+                  src="./logo.svg"
+                >
+
+                <h2>
+                  Leo Chat
+                </h2>
+
+                <p class="muted">
+                  Supabase configuration
+                  is missing.
+                </p>
+
+              </div>
+            `,
+            false
+          );
+
+        return;
+      }
+
+      app.innerHTML =
+        layout(
+          `
+            <div
+              class="screen center"
+              style="
+                justify-content:center
+              "
+            >
 
               <img
                 class="logo"
@@ -2790,42 +3617,10 @@
               </h2>
 
               <p class="muted">
-                Supabase configuration
-                is missing.
+                Connecting...
               </p>
 
             </div>
-            `,
-            false
-          );
-
-        return;
-      }
-
-      app.innerHTML =
-        layout(
-          `
-          <div
-            class="screen center"
-            style="
-              justify-content:center
-            "
-          >
-
-            <img
-              class="logo"
-              src="./logo.svg"
-            >
-
-            <h2>
-              Leo Chat
-            </h2>
-
-            <p class="muted">
-              Connecting...
-            </p>
-
-          </div>
           `,
           false
         );
@@ -2861,7 +3656,7 @@
       await render();
 
     } catch (error) {
-      console.log(
+      console.error(
         "Leo Chat startup:",
         error
       );
@@ -2869,38 +3664,40 @@
       app.innerHTML =
         layout(
           `
-          <div
-            class="screen center"
-            style="
-              justify-content:center;
-              padding:25px
-            "
-          >
-
-            <img
-              class="logo"
-              src="./logo.svg"
+            <div
+              class="screen center"
+              style="
+                justify-content:center;
+                padding:25px
+              "
             >
 
-            <h2>
-              Leo Chat
-            </h2>
+              <img
+                class="logo"
+                src="./logo.svg"
+              >
 
-            <p class="muted">
-              ${esc(
-                error.message ||
-                  "Could not connect to Leo Chat."
-              )}
-            </p>
+              <h2>
+                Leo Chat
+              </h2>
 
-            <button
-              class="btn"
-              onclick="location.reload()"
-            >
-              Try Again
-            </button>
+              <p class="muted">
+                ${esc(
+                  error.message ||
+                    "Could not connect to Leo Chat."
+                )}
+              </p>
 
-          </div>
+              <button
+                class="btn"
+                onclick="
+                  location.reload()
+                "
+              >
+                Try Again
+              </button>
+
+            </div>
           `,
           false
         );
@@ -2908,17 +3705,18 @@
   }
 
   /* =========================================================
-     PAGE LIFECYCLE
+     PAGE VISIBILITY
      ========================================================= */
 
   window.addEventListener(
     "beforeunload",
     () => {
+      /*
+        Best effort only.
+        Realtime presence also handles leaving.
+      */
+
       if (state.user) {
-        /*
-          Best-effort update. Browsers may not wait for
-          asynchronous requests during unload.
-        */
         markOffline();
       }
     }
@@ -2927,7 +3725,9 @@
   document.addEventListener(
     "visibilitychange",
     async () => {
-      if (!state.user) return;
+      if (!state.user) {
+        return;
+      }
 
       if (
         document.visibilityState ===
@@ -2943,24 +3743,29 @@
               {
                 user_id:
                   state.user.id,
+
                 online: true,
+
                 activity:
                   state.screen ===
                   "chat"
                     ? "chatting"
                     : "online",
+
                 at:
                   new Date().toISOString()
               }
             );
           } catch {}
         }
+      } else {
+        await markOffline();
       }
     }
   );
 
   /* =========================================================
-     START
+     START APP
      ========================================================= */
 
   boot();
