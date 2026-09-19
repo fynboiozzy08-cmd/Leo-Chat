@@ -1,8 +1,9 @@
-alert("LEO NEW APP.JS 20260919");
+alert("LEO NEW APP.JS 20260919 FIXED PROFILE");
 
 (() => {
   /* =========================================================
      LEO CHAT — WEB APP
+     Fixed profile form re-render
      Real Supabase attachments + presence
      ========================================================= */
 
@@ -70,6 +71,12 @@ alert("LEO NEW APP.JS 20260919");
   let messageChannel = null;
   let presenceChannel = null;
   let authSubscription = null;
+
+  /*
+    Prevent the initial Supabase auth event from rebuilding
+    a form while the user is typing.
+  */
+  let bootFinished = false;
 
   const esc = (s) =>
     String(s ?? "").replace(
@@ -359,7 +366,15 @@ alert("LEO NEW APP.JS 20260919");
               };
             });
 
-            render();
+            /*
+              Do NOT rebuild the profile form here.
+            */
+            if (
+              state.screen === "home" ||
+              state.screen === "search"
+            ) {
+              render();
+            }
           } catch (error) {
             console.log(
               "Presence sync:",
@@ -392,7 +407,12 @@ alert("LEO NEW APP.JS 20260919");
             };
           }
 
-          render();
+          if (
+            state.screen === "home" ||
+            state.screen === "search"
+          ) {
+            render();
+          }
         }
       )
       .on(
@@ -410,7 +430,12 @@ alert("LEO NEW APP.JS 20260919");
             };
           }
 
-          render();
+          if (
+            state.screen === "home" ||
+            state.screen === "search"
+          ) {
+            render();
+          }
         }
       )
       .subscribe(async (status) => {
@@ -1069,6 +1094,11 @@ alert("LEO NEW APP.JS 20260919");
           await loadPresence();
           render();
         }
+
+        /*
+          Never refresh the profile setup form
+          while the user is typing.
+        */
       },
       5000
     );
@@ -1135,6 +1165,10 @@ alert("LEO NEW APP.JS 20260919");
         )
         .subscribe();
   }
+
+  /* =========================================================
+     LAYOUT
+     ========================================================= */
 
   function layout(
     inner,
@@ -1280,8 +1314,14 @@ alert("LEO NEW APP.JS 20260919");
       state.presence = {};
       state.screen = "home";
 
+      bootFinished = false;
+
       render();
     };
+
+  /* =========================================================
+     AUTH
+     ========================================================= */
 
   function renderAuth() {
     app.innerHTML =
@@ -1407,6 +1447,14 @@ alert("LEO NEW APP.JS 20260919");
         await startMessageRealtime();
         startPolling();
 
+        /*
+          If there is no profile, go directly to
+          the setup screen.
+        */
+        if (!state.profile) {
+          state.screen = "setup";
+        }
+
         render();
 
       } catch (error) {
@@ -1417,7 +1465,30 @@ alert("LEO NEW APP.JS 20260919");
       }
     };
 
+  /* =========================================================
+     PROFILE SETUP
+     ========================================================= */
+
   function renderSetup() {
+
+    /*
+      CRITICAL FIX:
+
+      If the setup form already exists, do NOT rebuild it.
+
+      Rebuilding the HTML while the user is typing was
+      clearing the username field.
+    */
+
+    if (
+      document.getElementById("uname") &&
+      document.getElementById("dname")
+    ) {
+      return;
+    }
+
+    state.screen = "setup";
+
     app.innerHTML =
       layout(
         `
@@ -1454,6 +1525,7 @@ alert("LEO NEW APP.JS 20260919");
 
             <button
               class="btn"
+              id="profileSaveButton"
               onclick="
                 saveProfile()
               "
@@ -1469,6 +1541,7 @@ alert("LEO NEW APP.JS 20260919");
 
   window.saveProfile =
     async () => {
+
       const username =
         document
           .getElementById("uname")
@@ -1500,32 +1573,82 @@ alert("LEO NEW APP.JS 20260919");
         );
       }
 
-      const {
-        data,
-        error
-      } = await db
-        .from("profiles")
-        .insert({
-          id: state.user.id,
-          username: cleanUsername,
-          display_name,
-          avatar: "🦁"
-        })
-        .select()
-        .single();
-
-      if (error) {
-        return toast(
-          error.message
+      const button =
+        document.getElementById(
+          "profileSaveButton"
         );
+
+      if (button) {
+        button.disabled = true;
+        button.textContent =
+          "Saving...";
       }
 
-      state.profile = data;
+      try {
 
-      await ensurePresence();
+        const {
+          data,
+          error
+        } = await db
+          .from("profiles")
+          .insert({
+            id: state.user.id,
+            username: cleanUsername,
+            display_name,
+            avatar: "🦁"
+          })
+          .select()
+          .single();
 
-      render();
+        if (error) {
+          console.error(
+            "PROFILE SAVE ERROR:",
+            error
+          );
+
+          if (button) {
+            button.disabled = false;
+            button.textContent =
+              "Enter Leo Chat";
+          }
+
+          return toast(
+            error.message
+          );
+        }
+
+        state.profile = data;
+
+        await ensurePresence();
+        await getProfiles();
+
+        state.screen = "home";
+
+        render();
+
+      } catch (error) {
+
+        console.error(
+          "PROFILE SAVE EXCEPTION:",
+          error
+        );
+
+        if (button) {
+          button.disabled = false;
+          button.textContent =
+            "Enter Leo Chat";
+        }
+
+        toast(
+          error.message ||
+            "Could not save your profile."
+        );
+      }
     };
+
+  /* =========================================================
+     HOME
+     ========================================================= */
 
   async function renderHome() {
     await Promise.all([
@@ -1713,6 +1836,10 @@ alert("LEO NEW APP.JS 20260919");
       );
   }
 
+  /* =========================================================
+     SEARCH
+     ========================================================= */
+
   function renderSearch() {
     app.innerHTML =
       layout(
@@ -1857,6 +1984,10 @@ alert("LEO NEW APP.JS 20260919");
         </div>
       `;
   }
+
+  /* =========================================================
+     CHAT
+     ========================================================= */
 
   async function renderChat() {
     const p = state.chat;
@@ -2202,6 +2333,10 @@ alert("LEO NEW APP.JS 20260919");
       }
     };
 
+  /* =========================================================
+     CALLS
+     ========================================================= */
+
   window.callUser =
     (
       kind
@@ -2227,6 +2362,10 @@ alert("LEO NEW APP.JS 20260919");
 
       render();
     };
+
+  /* =========================================================
+     MOMENTS
+     ========================================================= */
 
   function renderMoments() {
     app.innerHTML =
@@ -2366,6 +2505,10 @@ alert("LEO NEW APP.JS 20260919");
       e.target.value = "";
     };
 
+  /* =========================================================
+     CALLS SCREEN
+     ========================================================= */
+
   function renderCalls() {
     app.innerHTML =
       layout(
@@ -2425,6 +2568,10 @@ alert("LEO NEW APP.JS 20260919");
         `
       );
   }
+
+  /* =========================================================
+     SETTINGS
+     ========================================================= */
 
   function renderSettings() {
     app.innerHTML =
@@ -2584,6 +2731,10 @@ alert("LEO NEW APP.JS 20260919");
       );
     };
 
+  /* =========================================================
+     NOTIFICATIONS
+     ========================================================= */
+
   function addNotification(
     title,
     body
@@ -2707,6 +2858,10 @@ alert("LEO NEW APP.JS 20260919");
       );
   }
 
+  /* =========================================================
+     MAIN RENDER
+     ========================================================= */
+
   async function render() {
     if (!state.user) {
       renderAuth();
@@ -2714,6 +2869,13 @@ alert("LEO NEW APP.JS 20260919");
     }
 
     if (!state.profile) {
+
+      /*
+        Always keep the user on the setup screen
+        until the profile actually exists.
+      */
+      state.screen = "setup";
+
       renderSetup();
       return;
     }
@@ -2760,8 +2922,14 @@ alert("LEO NEW APP.JS 20260919");
       return;
     }
 
+    state.screen = "home";
+
     await renderHome();
   }
+
+  /* =========================================================
+     AUTH LISTENER
+     ========================================================= */
 
   function startAuthListener() {
     if (authSubscription) {
@@ -2774,25 +2942,78 @@ alert("LEO NEW APP.JS 20260919");
           event,
           session
         ) => {
-          state.user =
+
+          const newUser =
             session?.user ||
             null;
 
+          state.user =
+            newUser;
+
           if (state.user) {
+
+            /*
+              Load the profile first.
+            */
             await loadProfile();
+
+            /*
+              If there is no profile, preserve the
+              setup screen instead of rebuilding it.
+            */
+            if (!state.profile) {
+              state.screen = "setup";
+
+              /*
+                Only render if the setup form isn't
+                already on screen.
+              */
+              if (
+                !document.getElementById(
+                  "uname"
+                )
+              ) {
+                renderSetup();
+              }
+
+              return;
+            }
+
+            /*
+              Profile exists.
+            */
             await startPresence();
             await startMessageRealtime();
             startPolling();
+
+            /*
+              Do not interrupt the profile form.
+            */
+            if (
+              state.screen ===
+              "setup"
+            ) {
+              state.screen =
+                "home";
+            }
+
+            await render();
+
           } else {
+
             state.profile = null;
 
             clearInterval(poll);
             clearInterval(
               presencePoll
             );
-          }
 
-          render();
+            /*
+              Only render the auth screen when
+              the user is actually signed out.
+            */
+            render();
+          }
         }
       );
 
@@ -2801,8 +3022,13 @@ alert("LEO NEW APP.JS 20260919");
       null;
   }
 
+  /* =========================================================
+     BOOT
+     ========================================================= */
+
   async function boot() {
     try {
+
       if (
         !cfg.SUPABASE_URL ||
         !cfg.SUPABASE_KEY
@@ -2877,17 +3103,30 @@ alert("LEO NEW APP.JS 20260919");
         null;
 
       if (state.user) {
+
         await loadProfile();
-        await startPresence();
-        await startMessageRealtime();
-        startPolling();
+
+        if (state.profile) {
+          await startPresence();
+          await startMessageRealtime();
+          startPolling();
+
+          state.screen = "home";
+
+        } else {
+
+          state.screen = "setup";
+        }
       }
 
       startAuthListener();
 
+      bootFinished = true;
+
       await render();
 
     } catch (error) {
+
       console.error(
         "Leo Chat startup:",
         error
@@ -2936,6 +3175,10 @@ alert("LEO NEW APP.JS 20260919");
     }
   }
 
+  /* =========================================================
+     PAGE VISIBILITY
+     ========================================================= */
+
   window.addEventListener(
     "beforeunload",
     () => {
@@ -2977,11 +3220,18 @@ alert("LEO NEW APP.JS 20260919");
             });
           } catch {}
         }
+
       } else {
+
         await markOffline();
       }
     }
   );
 
+  /* =========================================================
+     START
+     ========================================================= */
+
   boot();
+
 })();
