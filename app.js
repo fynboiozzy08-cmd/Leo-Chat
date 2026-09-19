@@ -2303,6 +2303,9 @@ alert("LEO NEW APP.JS 20260919");
     async (
       event
     ) => {
+
+      alert("PHOTO HANDLER FIRED");
+
       const files =
         Array.from(
           event.target?.files ||
